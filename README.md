@@ -1,5 +1,7 @@
 # SwitchDoc
 
+> **Documentation:** [SwitchDoc 12.2 – specifications, rebuild prompt and user manual (PDF)](docs/SwitchDoc-v12.2-Specifications-and-User-Manual.pdf)
+
 A small self-hosted web app to document network switches: inventory, ports, VLANs and access credentials.
 Python (Flask) + SQLite — one folder, no external database server, works fully offline on your LAN.
 

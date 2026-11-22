@@ -4143,7 +4143,7 @@ def audit_export():
 import re as _re
 EQUIPMENT_KINDS = [  # (kind, regex on equipment text / port type) - first match wins
     ("firewall", r"FORTIGATE|FIREWALL|PARE.?FEU|\bFW\b|\bFG\b|PFSENSE|SOPHOS"),
-    ("router", r"ROUTER|ROUTEUR|CANALBOX|\bFIBER|\bFIBRE|ORANGE|STARLINK|STRALINK|MODEM|\bISP\b|INTERNET|\bWAN\b|UPLINK|\bLINK\b"),
+    ("router", r"ROUTER|ROUTEUR|\bFIBER|\bFIBRE|STARLINK|MODEM|\bISP\b|INTERNET|\bWAN\b|UPLINK|\bLINK\b"),
     ("switch", r"SWITCH|\bSW[A-Z0-9]"),
     ("ap", r"\bAP\b|WIFI|WI-FI|ACCESS ?POINT|BORNE|UNIFI|\bWLAN"),
     ("camera", r"CAM|CAMERA|CAMÉRA|\bNVR\b|\bDVR\b|VIDEO|VIDÉO|CCTV"),
