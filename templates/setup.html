@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}{{ _("First-time setup") }}{% endblock %}{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<div class="card auth">
+  <div class="brand big"><span class="logo"><i></i><i></i><i class="t"></i><i class="o"></i></span>{{ app_name }}</div>
+  <div class="auth-langs">{% include "_lang.html" %}</div>
+  <p>{{ _("Create the first administrator. Administrators see every switch and every menu. Other users are added later under Settings › Users.") }}</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    {% if need_company %}<label>{{ _("Company") }}<input name="company" required placeholder="{{ _('Name of your company') }}"></label>{% endif %}
+    <div class="two"><label>{{ _("First name") }}<input name="first_name"></label><label>{{ _("Last name") }}<input name="last_name"></label></div>
+    <label>{{ _("Email") }}<input name="email" type="email"></label>
+    <label>{{ _("Title") }}<input name="title" placeholder="{{ _('IT Manager') }}"></label>
+    <label>{{ _("Username") }}<input name="username" value="admin" required></label>
+    <label>{{ _("Password") }}<input name="password" type="password" required autocomplete="new-password"></label>
+    {% with pw_field='password', pw_user_field='username' %}{% include "_pw_hint.html" %}{% endwith %}
+    <button class="btn primary wide">{{ _("Create administrator") }}</button>
+  </form>
+</div>
+{% endblock %}

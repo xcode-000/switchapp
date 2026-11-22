@@ -1,0 +1,283 @@
+{% extends "base.html" %}{% block title %}{{ sw.name }}{% endblock %}
+{% set editable = can('ports', 'edit') and active %}
+{% set direct = can('ports', 'modify') %}
+{% macro tile(p) -%}
+<button class="port{{ ' has-pending' if p.id in pending }}" id="tile-{{ p.id }}" data-id="{{ p.id }}" data-status="{{ p.status }}" data-type="{{ p.ptype }}" style="--pc: {{ type_colors.get(p.ptype, '#64748b') }}"
+  title="{{ _('Port') }} {{ p.name }} · {{ _('Active') if p.status=='active' else _('Disabled') }} · {{ p.ptype }}{% if p.speed == 'fiber' %} · {{ _("Fiber") }}{% endif %}{% if p.vlan %} · VLAN {{ p.vlan }}{% endif %}{% if p.equipment %} · {{ p.eq_type ~ ' ' if p.eq_type }}{{ p.equipment }}{% endif %}{% if p.equipment2 %} ↳ {{ p.equipment2 }}{% endif %}{% if p.id in pending %} · {{ _('change pending approval') }}{% endif %}">
+  <span class="led"></span><span class="num">{{ p.idx }}</span></button>
+{%- endmacro %}
+{% macro cell(p, f, extra='') -%}
+{% set pd = pending.get(p.id, {}).get(f) %} class="{{ extra }}{{ ' pend' if pd }}"{% if pd %} data-proposed="→ {{ _(status_labels.get(pd.value, pd.value)) if f == 'status' else (pd.value or _('(empty)')) }} · {{ pd.by }}"{% endif %}
+{%- endmacro %}
+{% macro vlan_options(cur) -%}
+<option value="">—</option><option value="ALL" {{ 'selected' if cur == 'ALL' }}>ALL ({{ _("trunk") }})</option>{% for v in vlans %}<option value="{{ v.number }}" {{ 'selected' if cur == v.number|string }}>{{ v.number }}{% if v.name %} · {{ v.name }}{% endif %}</option>{% endfor %}{% if cur and cur != 'ALL' and cur not in vlan_numbers %}<option value="{{ cur }}" selected>{{ cur }} ({{ _("not in Settings › VLANs") }})</option>{% endif %}
+{%- endmacro %}
+{% macro type_options(cur, with_switch=True) -%}
+<option value="">—</option>{% for t in asset_types if with_switch or t.name != switch_type %}<option {{ 'selected' if cur == t.name }}>{{ t.name }}</option>{% endfor %}{% if cur and cur not in atype_colors %}<option selected>{{ cur }}</option>{% endif %}
+{%- endmacro %}
+{% macro val(k, v) %}{% set x = show(k, v) %}{% if x == "" %}<span class="muted">—</span>{% else %}{{ x }}{% endif %}{% endmacro %}
+{% block content %}
+<div class="pagehead">
+  <div>
+    <div class="crumbs"><a href="{{ url_for('dashboard') }}">{{ _("Switches") }}</a>{% if sw.area %} / <a href="{{ url_for('dashboard', area=sw.area) }}">{{ sw.area }}</a>{% endif %}</div>
+    <h1>{{ sw.name }} {% if sw.designation %}<span class="h-sub">{{ sw.designation }}</span>{% endif %} {% if not active %}<span class="tag {{ 'off' if sw.status == 'disabled' else '' }}">{{ _("Disabled") if sw.status == 'disabled' else _("Replaced") }}</span>{% endif %}</h1>
+    <div class="chips">{% for gr in groups %}<a class="gchip" style="--gc: {{ gr.color }}" href="{{ url_for('dashboard', group=gr.id) }}">{{ gr.name }}</a>{% endfor %}</div>
+  </div>
+  <div class="btns">
+    {% if can('topology') and active %}<a class="btn ghost" href="{{ url_for('topology', focus=sw.name) }}">{{ _("Show in topology") }}</a>{% endif %}
+    {% if can('snmp') and active and sw.ip %}<a class="btn ghost" href="{{ url_for('snmp_page', switch=sw.id) }}" title="{{ _('Read the switch live over SNMP') }}">{{ _("Live (SNMP)") }}</a>{% endif %}
+    <details class="menu">
+      <summary class="btn">{{ _("Export / Print") }} ▾</summary>
+      <div class="menu-pop">
+        <a href="{{ url_for('switch_export', sid=sw.id) }}" class="exp-link">{{ _("Export (passwords masked)") }}</a>
+        {% if can('passwords') %}<a href="{{ url_for('switch_export', sid=sw.id, secrets=1) }}" class="exp-link" data-confirm="{{ _('The file will contain the passwords in plain text. Continue?') }}">{{ _("Export including passwords") }}</a>{% endif %}
+        <a href="{{ url_for('switch_print', sid=sw.id) }}" class="exp-link" target="_blank" rel="noopener">🖨 {{ _("Print the layout (verification sheet)") }}</a>
+        <span class="menu-note muted small" id="expNote" hidden>{{ _("Only the ports shown by the current filter will be exported.") }}</span>
+      </div>
+    </details>
+    {% if can('switches', 'edit') and sw.status != 'replaced' %}<a class="btn" href="{{ url_for('switch_edit', sid=sw.id) }}">{{ _("Edit switch / port count") }}</a>{% endif %}
+    {% if can('switches', 'modify') and active %}<a class="btn" href="{{ url_for('switch_replace', sid=sw.id) }}">{{ _("Replace hardware") }}</a>{% endif %}
+  </div>
+</div>
+
+{% if ticket %}
+<div class="card tk-banner">
+  <div class="grow"><b>🔧 {{ _("Maintenance ticket #%(n)s", n=ticket.id) }} - {{ ticket.title }}</b>
+    <div class="small">{{ _("Your port changes on this switch are held in the ticket and applied only when a supervisor validates it.") }}
+      {{ _("%(d)s / %(t)s switches verified", d=ticket_progress.done, t=ticket_progress.total) }}.</div></div>
+  <form method="post" action="{{ url_for('ticket_action', tid=ticket.id) }}" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="switch_id" value="{{ sw.id }}">
+    <input type="hidden" name="next" value="{{ url_for('ticket_view', tid=ticket.id) }}">
+    {% if ticket_sw.done %}<span class="tag approved">✓ {{ _("Verified") }}</span><input type="hidden" name="undo" value="1"><button class="btn sm ghost" name="action" value="switch_done">{{ _("Undo") }}</button>
+    {% else %}<input name="comment" placeholder="{{ _('note (optional)') }}" size="18"><button class="btn sm primary" name="action" value="switch_done">✓ {{ _("Mark this switch verified") }}</button>{% endif %}
+  </form>
+  <a class="btn sm ghost" href="{{ url_for('ticket_view', tid=ticket.id) }}">{{ _("Back to the ticket") }}</a>
+</div>
+{% elif active_tickets %}
+<div class="flash info">🔧 {% for tk in active_tickets %}<a href="{{ url_for('ticket_view', tid=tk.id) }}">{{ _("Maintenance ticket #%(n)s", n=tk.id) }} - {{ tk.title }}</a>{{ ' · ' if not loop.last }}{% endfor %}</div>
+{% endif %}
+
+{% if sw.status == 'disabled' %}
+<div class="flash error">{{ _("This switch is disabled since %(d)s and is hidden from the documentation, topology and search.", d=sw.status_changed_at or '?') }}{% if sw.status_reason %} {{ _("Reason") }}: <i>{{ sw.status_reason }}</i>.{% endif %}
+  {% if can('switches','modify') %}<form method="post" action="{{ url_for('switch_enable', sid=sw.id) }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('switch_view', sid=sw.id) }}"><button class="btn sm primary">{{ _("Re-enable") }}</button></form>{% endif %}</div>
+{% elif sw.status == 'replaced' %}
+<div class="flash info">{{ _("This is archived hardware: it was replaced on %(d)s.", d=sw.status_changed_at or '?') }}{% if successor %} <a href="{{ url_for('switch_view', sid=successor.id) }}">{{ _("Open the current switch %(name)s", name=successor.name) }}</a>.{% endif %}{% if sw.status_reason %} {{ _("Reason") }}: <i>{{ sw.status_reason }}</i>{% endif %}</div>
+{% endif %}
+
+<div class="info">
+  <div class="kv"><span>{{ _("IP address") }}</span><b><code>{{ sw.ip or '—' }}</code></b>
+    {% if sw.layer == 'L1' %}<div class="sub">{{ _("Unmanaged (Layer 1) - no IP address") }}</div>{% endif %}
+    {% if sw.ip and active and sw.layer != 'L1' %}<div class="links"><a href="http://{{ sw.ip }}" target="_blank" rel="noopener">Web</a><a href="https://{{ sw.ip }}" target="_blank" rel="noopener">HTTPS</a><a href="ssh://{{ (ssh_user ~ '@') if ssh_user }}{{ sw.ip }}">SSH</a><a href="telnet://{{ sw.ip }}">Telnet</a></div>{% endif %}</div>
+  <div class="kv"><span>{{ _("Model") }}</span><b>{{ sw.model or '—' }}</b>
+    <div class="chips tight"><span class="layer l-{{ (sw.layer or 'L3')|lower }}" title="{{ _(layers.get(sw.layer or 'L3', '')) }}">{{ sw.layer or 'L3' }}</span>{% if sw.poe %}<span class="layer">PoE</span>{% endif %}{% if sw.sfp %}<span class="layer">{{ sw.sfp_count or '' }} SFP</span>{% endif %}</div></div>
+  <div class="kv"><span>{{ _("Serial number") }}</span><b>{{ sw.serial or '—' }}</b>{% if sw.in_service %}<div class="sub">{{ _("In service since") }} {{ sw.in_service }}</div>{% endif %}</div>
+  <div class="kv"><span>{{ _("Location") }}</span><b>{{ sw.location or '—' }}</b>{% if sw.rack %}<div class="sub">{{ _("Rack identifier") }}: {{ sw.rack }}</div>{% endif %}{% if sw.area %}<div class="sub">{{ _("Area") }}: {{ sw.area }}</div>{% endif %}</div>
+  <div class="kv"><span>{{ _("PoE") }}</span><b>{{ _("Yes") if sw.poe else _("No") }}</b></div>
+  <div class="kv"><span>{{ _("Last updated") }}</span><b>{{ sw.updated_at or '—' }}</b></div>
+</div>
+{% if sw.notes %}<div class="notes">{{ sw.notes }}</div>{% endif %}
+
+{% if mon and mon.state != 'off' %}
+<div class="card status-card st-{{ mon.state }}" id="statusCard">
+  <div class="card-head">
+    <div><h2>{{ _("Status") }} <span class="st-badge st-{{ mon.state }}"><i></i>{{ mon.label }}{% if mon.since %} · {{ _("for %(d)s", d=mon.since) }}{% endif %}</span>
+      {% if mon.ticket %}<a class="small" href="{{ url_for('ticket_view', tid=mon.ticket) }}">{{ _("Maintenance ticket #%(n)s", n=mon.ticket) }}</a>{% endif %}</h2>
+      <div class="sub">{% if mon.last %}{{ _("Checked every %(n)s s · last check %(t)s", n=mon_interval, t=mon.last[11:19]) }}{% else %}{{ _("The first check runs within a minute.") }}{% endif %}</div></div>
+    {% if can('switches','modify') %}<a class="btn sm ghost" href="{{ url_for('monitoring_settings') }}">{{ _("Monitoring settings") }}</a>{% endif %}
+  </div>
+  <div class="st-kv">
+    <div><b>{% if mon.real == 'offline' %}—{% elif mon.rtt is not none %}{{ mon.rtt }} ms{% else %}—{% endif %}</b><span>{{ _("response time") }}{% if mon.loss %} · {{ mon.loss }}% {{ _("loss") }}{% endif %}</span></div>
+    <div><b>{{ mon.uptime or '—' }}</b><span>{{ _("uptime (SNMP)") }}{% if mon.rebooted %} · ↻ {{ _("rebooted at %(t)s", t=mon.rebooted) }}{% endif %}</span></div>
+    <div><b>{{ '%.2f'|format(mon_avail) ~ ' %' if mon_avail is not none else '—' }}</b><span>{{ _("availability, 30 days") }}</span></div>
+    <div><b>{{ mon_outages }}</b><span>{{ _("outages this month") }}</span></div>
+    {% if mon_links %}<div class="wide"><b>{% for l in mon_links %}<a href="{{ url_for('switch_view', sid=l.sid) }}" class="st-link st-{{ l.state }}"><i></i>{{ l.sw }}</a>{% if l.remote_port %} <span class="sub">{{ l.remote_port }}</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</b><span>{{ _("linked switches (check these first when it is offline)") }}</span></div>{% endif %}
+  </div>
+  <div class="st-time"><div class="sec">{{ _("Last 24 hours") }}</div>
+    <div class="st-bar">{% for s, pct in mon_day %}<i class="st-{{ s }}" style="width:{{ pct }}%" title="{{ _(mon_labels.get(s, s)) }}"></i>{% endfor %}</div>
+    <div class="st-axis"><span>-24 h</span><span>-18 h</span><span>-12 h</span><span>-6 h</span><span>{{ _("now") }}</span></div></div>
+  {% if mon_events %}<table class="tbl compact st-events"><tbody>
+    {% for e in mon_events %}<tr><td class="nowrap muted">{{ e.ts[:16] }}</td><td><span class="st-badge st-{{ e.state }}"><i></i>{{ _(mon_labels.get(e.state, e.state)) }}</span></td><td class="small">{{ e.detail }}</td></tr>{% endfor %}
+  </tbody></table>{% endif %}
+</div>
+{% elif mon and mon.why == 'excluded' %}
+<div class="card status-card st-off" id="statusCard"><div class="card-head"><div><h2>{{ _("Status") }} <span class="st-badge st-off"><i></i>{{ mon.label }}</span></h2>
+  <div class="sub">{{ _("The status check is turned off for this switch.") }}{% if can('switches','edit') %} <a href="{{ url_for('switch_edit', sid=sw.id) }}#monBox">{{ _("Turn it on") }}</a>{% endif %}</div></div></div></div>
+{% endif %}
+
+{% if can('credentials') and active %}
+<div class="card creds-card">
+  <div class="card-head">
+    <h2>{{ _("Credentials") }} {% if cred %}<span class="pill">{{ cred.name }}</span>{% endif %}</h2>
+    {% if cred %}<div>{% if can('passwords') %}<button class="btn sm" id="revealAll" data-cid="{{ cred.id }}" data-switch="{{ sw.name }}">{{ _("Show passwords") }}</button>{% else %}<span class="muted small" title="{{ _('Your authorisation profile does not allow seeing passwords.') }}">🔒 {{ _("Passwords hidden") }}</span>{% endif %}
+      {% if can('credentials','edit') %}<a class="btn sm ghost" href="{{ url_for('cred_edit', cid=cred.id) }}">{{ _("Edit profile") }}</a>{% endif %}</div>{% endif %}
+  </div>
+  {% if cred %}
+  <div class="cred-grid">
+    {% for f in cred_fields if f.value %}{% set sec = f.kind in secret_kinds %}
+    <div class="cred"><span>{{ _(f.label) }}</span>
+      <code data-k="f{{ f.id }}" class="{{ 'secret' if sec }}">{{ '••••••••' if sec else f.value }}</code>
+      {% if not sec or can('passwords') %}<button class="copy" data-k="f{{ f.id }}" data-cid="{{ cred.id }}" data-switch="{{ sw.name }}" title="{{ _('Copy') }}">⧉</button>{% endif %}</div>
+    {% else %}<p class="muted">{{ _("No credentials filled in.") }}</p>{% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">{{ _("No credential profile assigned.") }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if not can('ports') %}
+<div class="card empty">{{ _("Your authorisation profile does not include access to ports.") }}</div>
+{% elif ports %}
+<div class="panel-wrap">
+  <div class="chassis{{ ' off' if not active }}">
+    <div class="chassis-label">{{ sw.name }}<small>{{ sw.model }}</small></div>
+    {% set copper = ports[:ports|length - sfp_n] %}
+    <div class="portgrid" id="portgrid">{% for p in copper %}{{ tile(p) }}{% endfor %}</div>
+    {% if sfp_n %}<div class="portgrid sfp" title="SFP">{% for p in ports[ports|length - sfp_n:] %}{{ tile(p) }}{% endfor %}</div>{% endif %}
+  </div>
+  <div class="legend">
+    {% for t in port_types %}<span><i class="lg" style="background: {{ t.color }}"></i>{{ t.name }}</span>{% endfor %}
+    <span><i class="lg disabled"></i>{{ _("Disabled") }}</span>
+    {% if pending %}<span><i class="lg pend"></i>{{ _("Change pending approval") }}</span>{% endif %}
+    <span class="muted">{{ _("Click a port to jump to it") }}</span>
+  </div>
+</div>
+
+{% if ticket %}
+{% elif editable and not direct %}
+<div class="flash info">{{ _("You can propose changes: click Edit ports, make your changes and click Save. They are sent for approval and appear here in amber until a supervisor approves them.") }} <a href="{{ url_for('approvals') }}">{{ _("See my requests") }}</a></div>
+{% elif direct and pending %}
+<div class="flash info">{{ _("%(n)s ports on this switch have changes waiting for approval.", n=pending|length) }} <a href="{{ url_for('approvals') }}">{{ _("Review them") }}</a></div>
+{% endif %}
+
+<div class="card flush">
+  <div class="table-tools">
+    <input type="search" id="portFilter" placeholder="{{ _('Filter ports (equipment, VLAN, patch panel…)') }}">
+    <select id="statusFilter"><option value="">{{ _("All statuses") }}</option><option value="active">{{ _("Active only") }}</option><option value="disabled">{{ _("Disabled only") }}</option></select>
+    <select id="typeFilter"><option value="">{{ _("All types") }}</option>{% for t in port_types %}<option>{{ t.name }}</option>{% endfor %}</select>
+    <span id="saveState" class="save-state">{{ '' if editable else _("Read only") }}</span>
+    {% if editable %}
+    <span class="edit-btns">
+      <button type="button" class="btn sm primary" id="editBtn">✎ {{ _("Edit ports") }}</button>
+      <button type="button" class="btn sm primary" id="saveBtn" hidden>💾 <span>{{ _("Save") }}</span></button>
+      <button type="button" class="btn sm ghost" id="cancelBtn" hidden>{{ _("Cancel") }}</button>
+    </span>
+    {% endif %}
+  </div>
+  {% if editable %}
+  <div class="bulk" id="bulk" hidden>
+    <b>{{ _("Selected:") }} <span id="bulkCount">0</span></b>
+    <select id="bulkStatus"><option value="">{{ _("Status…") }}</option>{% for v, l in statuses %}<option value="{{ v }}">{{ _(l) }}</option>{% endfor %}</select>
+    <select id="bulkType"><option value="">{{ _("Port type…") }}</option>{% for t in port_types %}<option>{{ t.name }}</option>{% endfor %}</select>
+    <select id="bulkSpeed"><option value="">{{ _("Speed…") }}</option>{% for v, l in speeds %}<option value="{{ v }}">{{ _(l) }}</option>{% endfor %}</select>
+    <select id="bulkVlan"><option value="">{{ _("VLAN…") }}</option><option value="ALL">ALL ({{ _("trunk") }})</option>{% for v in vlans %}<option value="{{ v.number }}">{{ v.number }}{% if v.name %} · {{ v.name }}{% endif %}</option>{% endfor %}</select>
+    <button class="btn sm primary" id="bulkApply">{{ _("Apply to selected") }}</button>
+    <button class="btn sm ghost" id="bulkClear">{{ _("Clear selection") }}</button>
+  </div>
+  {% endif %}
+  <div class="scroll-x ports-wrap">
+  <table class="tbl ports readonly" id="ports" data-ticket="{{ ticket.id if ticket else '' }}" data-direct="{{ 1 if direct and not ticket else 0 }}" data-editable="{{ 1 if editable else 0 }}">
+    <thead><tr>
+      {% if editable %}<th class="cb"><input type="checkbox" id="selAll" title="{{ _('Select all visible') }}"></th>{% endif %}
+      <th>{{ _("Port") }}</th><th>{{ _("Status") }}</th><th>{{ _("Type") }}</th><th>{{ _("Speed") }}</th><th>{{ _("VLAN") }}</th><th>{{ _("Patch panel port") }}</th><th>{{ _("Patch panel label") }}</th>
+      <th>{{ _("Equipment type") }}</th><th>{{ _("Connected equipment") }}</th><th>{{ _("User") }}</th><th>{{ _("Remote port") }}</th><th>{{ _("Description") }}</th>
+    </tr></thead>
+    <tbody>
+    {% set dis = 'disabled' %}
+    {% for p in ports %}
+    <tr id="port-{{ p.id }}" data-id="{{ p.id }}" data-status="{{ p.status }}" data-type="{{ p.ptype }}" data-speed="{{ p.speed or 'gigabit' }}" class="{{ 's2s' if p.remote_switch in switch_ids else ('ext' if p.remote_switch) }}{{ ' has-sub' if p.equipment2 }}">
+      {% if editable %}<td class="cb"><input type="checkbox" class="sel"></td>{% endif %}
+      <td{{ cell(p,'name') }}><input data-f="name" value="{{ p.name }}" class="w-port" {{ dis }}></td>
+      <td{{ cell(p,'status') }}><span class="dot {{ p.status }}"></span><select data-f="status" {{ dis }}>{% for v, l in statuses %}<option value="{{ v }}" {{ 'selected' if p.status == v }}>{{ _(l) }}</option>{% endfor %}</select></td>
+      <td{{ cell(p,'ptype') }}><i class="tsw" style="background: {{ type_colors.get(p.ptype, '#64748b') }}"></i><select data-f="ptype" {{ dis }}>{% for t in port_types %}<option {{ 'selected' if p.ptype == t.name }}>{{ t.name }}</option>{% endfor %}{% if p.ptype not in type_colors %}<option selected>{{ p.ptype }}</option>{% endif %}</select></td>
+      <td{{ cell(p,'speed') }}><select data-f="speed" class="spd" {{ dis }}>{% for v, l in speeds %}<option value="{{ v }}" {{ 'selected' if (p.speed or 'gigabit') == v }}>{{ _(l) }}</option>{% endfor %}</select></td>
+      <td{{ cell(p,'vlan') }}><select data-f="vlan" class="w-vlan" {{ dis }}>{{ vlan_options(p.vlan) }}</select></td>
+      <td{{ cell(p,'patch_port') }}><input data-f="patch_port" value="{{ p.patch_port }}" {{ dis }}></td>
+      <td{{ cell(p,'patch_label') }}><input data-f="patch_label" value="{{ p.patch_label }}" {{ dis }}></td>
+      <td{{ cell(p,'eq_type','eqt') }}><img class="ticon sm" alt="" src="{{ url_for('static', filename='icons/' ~ atype_icons.get(p.eq_type, 'other') ~ '.svg') }}"{% if not p.eq_type %} hidden{% endif %}><select data-f="eq_type" {{ dis }}>{{ type_options(p.eq_type) }}</select></td>
+      <td{{ cell(p,'equipment','eqc remote') }}>
+        <select data-f="equipment" class="w-wide" {{ dis }}><option value="{{ p.equipment }}" selected>{{ p.equipment }}</option></select>{% set sid2 = switch_ids.get(p.equipment) if p.eq_type == switch_type %}<a class="go" {% if sid2 %}href="{{ url_for('switch_view', sid=sid2) }}" title="{{ _('Open switch') }}"{% elif p.equipment and can('assets') %}href="{{ url_for('assets_page', q=p.equipment) }}" title="{{ _('Open asset') }}"{% else %}hidden{% endif %}>↗</a>
+        <div class="eq-sub{{ ' pend' if pending.get(p.id, {}).get('equipment2') }}" {% if not p.equipment2 %}hidden{% endif %}><span class="sub-arrow" title="{{ _('Device behind (e.g. PC behind a phone)') }}">↳</span><select data-f="eq2_type" class="sub-type" {{ dis }}>{{ type_options(p.eq2_type) }}</select><select data-f="equipment2" class="sub-eq" {{ dis }}><option value="{{ p.equipment2 }}" selected>{{ p.equipment2 }}</option></select><button type="button" class="sub-del" title="{{ _('Remove the device behind') }}">×</button></div>
+        <button type="button" class="add-sub" hidden title="{{ _('Add a device plugged behind this one (e.g. a PC behind a phone)') }}">+ ↳ {{ _("device behind") }}</button></td>
+      <td{{ cell(p,'user') }}><input data-f="user" value="{{ p.user }}" {{ dis }}></td>
+      <td{{ cell(p,'remote_port') }}><input data-f="remote_port" value="{{ p.remote_port }}" class="w-port" {{ dis }}></td>
+      <td{{ cell(p,'description') }}><input data-f="description" value="{{ p.description }}" class="w-wide" {{ dis }}></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% else %}
+<div class="card empty">{{ _("This switch has no ports yet.") }}{% if can('switches','edit') and active %} <a href="{{ url_for('switch_edit', sid=sw.id) }}">{{ _("Set the number of ports") }}</a>{% endif %}</div>
+{% endif %}
+
+{% if connections %}
+<div class="card connections" id="connections">
+  <div class="card-head"><h2>{{ _("Connections") }} <span class="muted small">({{ connections|length }})</span></h2>
+    {% if can('topology') %}<a class="btn sm ghost" href="{{ url_for('topology', focus=sw.name) }}">{{ _("Show in topology") }}</a>{% endif %}</div>
+  <table class="tbl compact">
+    <thead><tr><th>{{ _("Port") }}</th><th></th><th>{{ _("Switch / device") }}</th><th>{{ _("Remote port") }}</th><th>{{ _("Type") }}</th><th>{{ _("Check") }}</th></tr></thead>
+    {% for c in connections %}
+    <tr class="conn-{{ c.state }}">
+      <td>{% if c.pid %}<a href="#port-{{ c.pid }}" class="swname">{{ c.port }}</a>{% else %}<b>{{ c.port }}</b>{% endif %}</td>
+      <td class="muted">↔</td>
+      <td>{% if c.rsid %}<a href="{{ url_for('switch_view', sid=c.rsid) }}" class="swname">{{ c.remote }}</a>{% else %}{{ c.remote }}{% endif %}</td>
+      <td>{{ c.rport or '—' }}</td>
+      <td><span class="speed-tag">{{ c.type }}</span>{% if c.speed == 'fiber' %} <span class="speed-tag">{{ _("Fiber") }}</span>{% endif %}{% if c.status == 'disabled' %} <span class="tag off">{{ _("Disabled") }}</span>{% endif %}</td>
+      <td>{% if c.state == 'ok' %}<span class="tag approved">✓ {{ _("documented on both switches") }}</span>
+          {% elif c.state == 'device' %}<span class="tag">{{ _("other device") }}</span>
+          {% elif c.state == 'incoming' %}<span class="tag warn">{{ _("only documented on %(name)s", name=c.remote) }}</span>
+          {% elif c.state == 'missing' %}<span class="tag off">{{ _("remote port does not exist") }}</span>
+          {% else %}<span class="tag warn">{{ _("the other switch says something else") }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ _("Tip: in Edit ports, choose the equipment type Switch, then the switch and its port from the drop-downs - the other switch is updated automatically when you save.") }}</p>
+</div>
+{% endif %}
+
+{% if archived %}
+<div class="card">
+  <h2>{{ _("Previous hardware") }}</h2>
+  <table class="tbl compact">
+    <thead><tr><th>{{ _("Replaced on") }}</th><th>{{ _("Model") }}</th><th>{{ _("Serial number") }}</th><th>{{ _("IP address") }}</th><th>{{ _("Reason") }}</th><th></th></tr></thead>
+    {% for a in archived %}<tr><td>{{ a.status_changed_at }}</td><td>{{ a.model }}</td><td>{{ a.serial }}</td><td>{{ a.ip }}</td><td class="small">{{ a.status_reason }}</td>
+      <td class="r"><a class="btn sm" href="{{ url_for('switch_view', sid=a.id) }}">{{ _("Open archive") }}</a></td></tr>{% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if history %}
+<details class="card history">
+  <summary><h2>{{ _("Change history") }} <span class="muted small">({{ history|length }})</span></h2></summary>
+  <table class="tbl compact">
+    <thead><tr><th>{{ _("Date") }}</th><th>{{ _("User") }}</th><th>{{ _("Action") }}</th><th>{{ _("Details") }}</th></tr></thead>
+    {% for h in history %}
+    <tr><td class="nowrap small">{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ _(actions.get(h.action, h.action)) }}</td>
+      <td class="small">{% for k, v in h.details.items() %}<div><span class="muted">{{ _(all_labels.get(k, k)) }}:</span> {% if v is sequence and v is not string and v|length == 2 %}{% if v[0] is not none and v[0] != '' %}<del>{{ val(k, v[0]) }}</del> → {% endif %}<ins>{{ val(k, v[1]) }}</ins>{% else %}{{ v }}{% endif %}</div>{% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+  {% if can('audit') %}<p class="small"><a href="{{ url_for('audit_log', q=sw.name) }}">{{ _("Open in the audit log") }}</a></p>{% endif %}
+</details>
+{% endif %}
+
+<script>
+window.SWITCH_IDS = {{ switch_ids|tojson }};
+window.SWITCH_URL = "{{ url_for('switch_view', sid=0) }}";
+window.TYPE_COLORS = {{ type_colors|tojson }};
+window.STATUS_LABELS = {{ {'active': _('Active'), 'disabled': _('Disabled')}|tojson }};
+window.LINK_PORTS = {{ link_ports|tojson }};
+window.ASSET_TYPES = {{ asset_types_js|tojson }};
+window.ASSETS = {{ assets_js|tojson }};
+window.SWITCH_TYPE = {{ switch_type|tojson }};
+window.ICON_URL = "{{ url_for('static', filename='icons/') }}";
+window.ASSETS_URL = {{ (url_for('assets_page') if can('assets') else '')|tojson }};
+window.CAN_NEW_ASSET = {{ (can('ports', 'edit'))|tojson }};
+window.CLEARED_WHEN_DISABLED = {{ cleared_when_disabled|tojson }};
+window.CUR_SWITCH = {{ sw.name|tojson }};
+window.T_SAVE_N = {{ _("Save (%(n)s)")|tojson }};
+window.T_LEAVE = {{ _("You have unsaved changes on this switch.")|tojson }};
+</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ports.js') }}"></script>{% endblock %}

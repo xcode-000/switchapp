@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% block title %}{{ _("Security") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1></div>
+{% include "_settings_nav.html" %}
+{% set ed = can('ip_access', 'edit') %}
+<div class="card">
+  <h2>{{ _("Password policy") }}</h2>
+  <p class="muted">{{ _("Every new password (users, administrators, temporary passwords) must respect these rules. The rules are shown under every password field while typing.") }}</p>
+  <form method="post" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="inline-num">{{ _("Minimum length") }} <input type="number" name="pw_min" min="6" max="64" value="{{ policy.pw_min }}" {{ 'disabled' if not ed }}></label>
+    <label class="check"><input type="checkbox" name="pw_upper" value="1" {{ 'checked' if policy.pw_upper }} {{ 'disabled' if not ed }}> {{ _("Uppercase letter") }}</label>
+    <label class="check"><input type="checkbox" name="pw_lower" value="1" {{ 'checked' if policy.pw_lower }} {{ 'disabled' if not ed }}> {{ _("Lowercase letter") }}</label>
+    <label class="check"><input type="checkbox" name="pw_digit" value="1" {{ 'checked' if policy.pw_digit }} {{ 'disabled' if not ed }}> {{ _("Digit") }}</label>
+    <label class="check"><input type="checkbox" name="pw_special" value="1" {{ 'checked' if policy.pw_special }} {{ 'disabled' if not ed }}> {{ _("Special character") }}</label>
+    {% if ed %}<button class="btn primary" name="action" value="policy">{{ _("Save") }}</button>{% endif %}
+  </form>
+</div>
+<div class="card">
+  <h2>{{ _("Session timeout") }}</h2>
+  <p class="muted">{{ _("A user who does nothing for this time is signed out automatically (a warning appears one minute before). Typing in a page counts as activity.") }}</p>
+  <form method="post" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="inline-num">{{ _("Sign out after") }} <input type="number" name="minutes" min="1" max="1440" value="{{ timeout }}" {{ 'disabled' if not ed }}> {{ _("minutes without activity") }}</label>
+    {% if ed %}<button class="btn primary" name="action" value="timeout">{{ _("Save") }}</button>{% endif %}
+  </form>
+</div>
+<div class="card">
+  <div class="card-head"><h2>{{ _("Network access") }} <span class="tag {{ 'approved' if enabled else 'off' }}">{{ _("On") if enabled else _("Off") }}</span></h2>
+    {% if ed %}<form method="post" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      {% if enabled %}<button class="btn" name="action" value="disable" data-confirm="{{ _('Allow every IP address again?') }}">{{ _("Turn off (allow every address)") }}</button>
+      {% else %}<button class="btn primary" name="action" value="enable" {{ 'disabled' if not rules }}>{{ _("Turn on") }}</button>{% endif %}</form>{% endif %}</div>
+  <p class="muted">{{ _("When it is on, only the addresses below can open SwitchDoc (the login page included); everybody else gets “Access refused” and the attempt is written to the audit log. The server itself (127.0.0.1) is always allowed.") }}</p>
+  <p>{{ _("Your address:") }} <code>{{ my_ip }}</code> {% if my_ip_ok %}<span class="tag approved">✓ {{ _("allowed by the rules") }}</span>{% else %}<span class="tag warn">{{ _("not covered by the rules") }}</span>{% endif %}</p>
+  <p class="muted small">{{ _("Locked out? On the server run: python app.py ip-access off (then restart the SwitchDoc service).") }}</p>
+</div>
+<div class="card flush scroll-x">
+<table class="tbl">
+  <thead><tr><th>{{ _("Allowed address, subnet or range") }}</th><th>{{ _("Description") }}</th><th>{{ _("Added") }}</th><th></th></tr></thead>
+  {% for r in rules %}
+  <tr><td><code><b>{{ r.rule }}</b></code>{% if r.id in mine %} <span class="tag approved">{{ _("you") }}</span>{% endif %}</td><td>{{ r.description }}</td>
+    <td class="small muted">{{ r.created_at }} · {{ r.created_by }}</td>
+    <td class="r">{% if ed %}<form method="post" class="inline" data-confirm="{{ _('Delete %(name)s?', name=r.rule) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ r.id }}"><button class="btn sm danger" name="action" value="delete">✕</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="4" class="empty">{{ _("No rule yet - every address is allowed.") }}</td></tr>{% endfor %}
+  {% if ed %}
+  <tr class="new-row"><td><input form="ipadd" name="rule" required placeholder="10.10.2.0/23 · 10.99.99.5 · 10.10.2.10-10.10.2.50"></td>
+    <td><input form="ipadd" name="description" placeholder="{{ _('e.g. IT office') }}" class="w-wide"></td><td></td>
+    <td class="r"><form method="post" id="ipadd" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm primary" name="action" value="add">{{ _("Add") }}</button></form></td></tr>
+  {% endif %}
+</table>
+</div>
+{% endblock %}

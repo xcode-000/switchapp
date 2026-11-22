@@ -1,0 +1,46 @@
+{% extends "base.html" %}{% block title %}{{ _("Import / Export") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Import / Export") }}</h1>
+<div class="card tpl-box">
+  <div class="grow"><h2 class="nomargin">{{ _("1. Download the import template") }}</h2>
+    <p class="muted nomargin">{{ _("An empty workbook with an Instructions sheet explaining every column, and drop-down lists built from your settings (port types, VLANs, equipment types and assets, switches).") }}</p></div>
+  <a class="btn primary" href="{{ url_for('import_template') }}">⬇ {{ _("Download the import template") }}</a>
+</div>
+<div class="grid2">
+  {% if can('import_export','edit') %}
+  <form method="post" enctype="multipart/form-data" class="card">
+    <h2>{{ _("2. Import from Excel") }}</h2>
+    <p class="muted">{{ _("Reads the Summary sheet (switches + credentials), the VLAN sheet, the Assets sheet, and every sheet with Switch and Port Number columns. Columns are matched by header name, in any of the four languages. Re-importing updates existing switches by name.") }}</p>
+    <p class="muted small">{{ _("Old workbooks without an Equipment Type column are accepted too: the connected equipment is converted automatically (e.g. 1114/PC0107 becomes phone 1114 with PC PC0107 behind it).") }}</p>
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>{{ _("Workbook (.xlsx)") }}<input type="file" name="file" accept=".xlsx,.xlsm" required></label>
+    <p class="muted small">{{ _("A switch group is created for every Area, and each switch is added to its area's group.") }}</p>
+    {% if can('import_export','modify') %}<label class="check"><input type="checkbox" name="replace" value="1"> {{ _("Replace everything (delete all current switches, ports, assets, VLANs and credential profiles first)") }}</label>{% endif %}
+    <button class="btn primary">{{ _("Import") }}</button>
+  </form>
+  {% endif %}
+  <div class="card">
+    <h2>{{ _("Export to Excel") }}</h2>
+    <p class="muted">{{ _("Download all the documentation you can see as a workbook: a Summary sheet, a VLAN sheet, an Assets sheet and one port sheet per area - in the same layout as the import template, so it can be edited and imported back. To export a single switch, use the Export button on its page or in Settings › Switches.") }}</p>
+    <p><a class="btn" href="{{ url_for('export_xlsx') }}">{{ _("Export (passwords masked)") }}</a></p>
+    {% if can('passwords') %}<p><a class="btn ghost" href="{{ url_for('export_xlsx', secrets=1) }}" data-confirm="{{ _('The file will contain the passwords in plain text. Continue?') }}">{{ _("Export including passwords") }}</a></p>{% endif %}
+    <p class="muted small">{{ _("For a full backup, also copy the data folder (database + secret.key). Without secret.key the stored passwords cannot be decrypted.") }}</p>
+  </div>
+</div>
+{% if report %}
+<div class="card">
+  <h2>{{ _("Import result") }}</h2>
+  <div class="tiles">
+    <div class="tile"><b>{{ report.switches_new }}</b><span>{{ _("switches created") }}</span></div>
+    <div class="tile"><b>{{ report.switches_updated }}</b><span>{{ _("switches updated") }}</span></div>
+    <div class="tile ok"><b>{{ report.ports }}</b><span>{{ _("ports imported") }}</span></div>
+    <div class="tile"><b>{{ report.vlans }}</b><span>{{ _("VLANs") }}</span></div>
+    <div class="tile trunk"><b>{{ report.cred_profiles }}</b><span>{{ _("credential profiles") }}</span></div>
+    <div class="tile"><b>{{ report.groups }}</b><span>{{ _("groups created") }}</span></div>
+    <div class="tile"><b>{{ report.assets or 0 }}</b><span>{{ _("assets") }}</span></div>
+  </div>
+  <ul class="log">{% for l in report.log %}<li>{{ l }}</li>{% endfor %}</ul>
+  <a class="btn primary" href="{{ url_for('dashboard') }}">{{ _("Go to switches") }} →</a>
+</div>
+{% endif %}
+{% endblock %}

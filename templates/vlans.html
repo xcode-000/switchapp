@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block title %}{{ _("VLANs") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1></div>
+{% include "_settings_nav.html" %}
+{% set ro = not can('vlans','edit') %}
+<p class="muted">{{ _("VLANs listed here appear as suggestions in every port VLAN field. Use ALL for trunks carrying every VLAN, or a list such as 100,200,300.") }}</p>
+<div class="card flush scroll-x">
+<table class="tbl{{ ' ro' if ro }}">
+  <thead><tr><th>{{ _("VLAN") }}</th><th>{{ _("Name") }}</th><th>{{ _("Subnet / gateway") }}</th><th>{{ _("DHCP") }}</th><th>{{ _("Notes") }}</th><th>{{ _("Access ports") }}</th><th></th></tr></thead>
+  {% for v in vlans %}{% set f = 'vf' ~ v.id %}
+  <tr>
+    <td><input form="{{ f }}" name="number" type="number" value="{{ v.number }}" class="w-vlan" required></td>
+    <td><input form="{{ f }}" name="name" value="{{ v.name }}"></td>
+    <td><input form="{{ f }}" name="subnet" value="{{ v.subnet }}"></td>
+    <td><input form="{{ f }}" type="checkbox" name="dhcp" value="1" {{ 'checked' if v.dhcp }}></td>
+    <td><input form="{{ f }}" name="notes" value="{{ v.notes }}" class="w-wide"></td>
+    <td>{{ v.used }}</td>
+    <td class="r nowrap">
+      {% if not ro %}<form method="post" id="{{ f }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ v.id }}"><button class="btn sm">{{ _("Save") }}</button></form>{% endif %}
+      {% if can('vlans','modify') %}<form method="post" action="{{ url_for('vlan_delete', vid=v.id) }}" class="inline" data-confirm="{{ _('Delete VLAN %(n)s?', n=v.number) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm danger" title="{{ _('Delete') }}">✕</button></form>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  {% if not ro %}
+  <tr class="new-row">
+    <td><input form="vnew" name="number" type="number" placeholder="100" class="w-vlan" required></td>
+    <td><input form="vnew" name="name" placeholder="LAN"></td>
+    <td><input form="vnew" name="subnet" placeholder="10.10.2.1/23"></td>
+    <td><input form="vnew" type="checkbox" name="dhcp" value="1"></td>
+    <td><input form="vnew" name="notes" class="w-wide"></td><td></td>
+    <td class="r"><form method="post" id="vnew" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm primary">{{ _("Add VLAN") }}</button></form></td>
+  </tr>
+  {% endif %}
+</table>
+</div>
+{% endblock %}

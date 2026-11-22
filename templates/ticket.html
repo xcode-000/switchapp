@@ -1,0 +1,126 @@
+{% extends "base.html" %}{% block title %}#{{ t.id }} {{ t.title }}{% endblock %}
+{% macro val(k, v) %}{% set x = show(k, v) %}{% if x == "" %}<span class="muted">—</span>{% else %}{{ x }}{% endif %}{% endmacro %}
+{% block content %}
+{% set pg = progress %}{% set pct = (100 * pg.done / pg.total)|round|int if pg.total else 0 %}
+<div class="pagehead">
+  <div><div class="crumbs"><a href="{{ url_for('maintenance') }}">{{ _("Maintenance") }}</a></div>
+    <h1>#{{ t.id }} {{ t.title }} <span class="tag st-{{ t.status }}">{{ _(statuses[t.status]) }}</span></h1>
+    <p class="muted nomargin">{{ _(kinds.get(t.kind, t.kind)) }}{% if t.scope %} · {{ _("Racks") }}: {{ t.scope }}{% endif %}</p></div>
+  <div class="btns">
+    {% if can('maintenance', 'modify') and t.status in ('open', 'in_progress') %}<a class="btn" href="{{ url_for('ticket_edit', tid=t.id) }}">{{ _("Edit / assign technicians") }}</a>{% endif %}
+  </div>
+</div>
+
+<div class="tk-steps">
+  {% for st in ['open', 'in_progress', 'pending_validation', 'validated'] %}
+  <div class="step{{ ' done' if loop.index0 < ['open', 'in_progress', 'pending_validation', 'validated'].index(t.status) if t.status != 'cancelled' else '' }}{{ ' now' if st == t.status }}">{{ _(statuses[st]) }}</div>
+  {% endfor %}
+  {% if t.status == 'cancelled' %}<div class="step now cancelled">{{ _("Cancelled") }}</div>{% endif %}
+</div>
+
+<div class="info">
+  <div class="kv"><span>{{ _("Planned") }}</span><b>{{ t.planned_start }} → {{ t.planned_end }}</b></div>
+  <div class="kv"><span>{{ _("Actual") }}</span><b>{{ t.actual_start or '—' }}{% if t.actual_end %} → {{ t.actual_end }}{% endif %}</b></div>
+  <div class="kv"><span>{{ _("Assigned technicians") }}</span><b>{% for a in assignees %}{{ user_label(a) }}{{ ', ' if not loop.last }}{% else %}—{% endfor %}</b></div>
+  <div class="kv"><span>{{ _("Progress") }}</span><b>{{ _("%(d)s / %(t)s switches verified", d=pg.done, t=pg.total) }}</b><div class="tk-progress"><div class="bar"><i style="width: {{ pct }}%"></i></div></div></div>
+  <div class="kv"><span>{{ _("Created") }}</span><b>{{ t.created_at }}</b><div class="sub">{{ user_label(users.get(t.created_by)) }}</div></div>
+  {% if t.validated_by %}<div class="kv"><span>{{ _("Validated") }}</span><b>{{ t.validated_at }}</b><div class="sub">{{ user_label(users.get(t.validated_by)) }}</div></div>{% endif %}
+</div>
+{% if t.description %}<div class="notes">{{ t.description }}</div>{% endif %}
+{% if t.tech_comment %}<div class="flash info"><b>{{ _("Technician comment") }} ({{ user_label(users.get(t.submitted_by)) }}):</b> {{ t.tech_comment }}</div>{% endif %}
+{% if t.validation_comment and t.status in ('in_progress', 'validated', 'cancelled') %}<div class="flash {{ 'error' if t.status == 'in_progress' else 'info' }}"><b>{{ _("Supervisor comment") }}:</b> {{ t.validation_comment }}</div>{% endif %}
+
+{# ---- actions #}
+{% if t.status == 'open' and (is_assignee or me.is_admin) and can('maintenance', 'edit') %}
+<form method="post" action="{{ url_for('ticket_action', tid=t.id) }}" class="card tk-action">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div><b>{{ _("Ready to start?") }}</b> <span class="muted">{{ _("The actual start date will be set to now.") }}</span></div>
+  <button class="btn primary" name="action" value="start">▶ {{ _("Start - set In progress") }}</button>
+</form>
+{% endif %}
+{% if t.status == 'in_progress' and can_work %}
+<form method="post" action="{{ url_for('ticket_action', tid=t.id) }}" class="card tk-action">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="grow"><b>{{ _("Submit the maintenance") }}</b>
+    <p class="muted small nomargin">{{ _("Open each switch below, check it, correct the documentation if needed and mark it verified. Then submit: a supervisor will validate and your changes will be applied.") }}</p>
+    <textarea name="comment" rows="2" maxlength="500" placeholder="{{ _('Short comment for the supervisor (what you did, what you found)…') }}"></textarea></div>
+  <button class="btn primary" name="action" value="submit" {{ 'disabled' if pg.done < pg.total }} title="{{ _('Every switch must be marked verified first') if pg.done < pg.total }}">✔ {{ _("Submit for validation") }}</button>
+</form>
+{% endif %}
+{% if t.status == 'pending_validation' %}
+  {% if can_validate %}
+  <form method="post" action="{{ url_for('ticket_action', tid=t.id) }}" class="card tk-action">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div class="grow"><b>{{ _("Validation") }}</b>
+      <p class="muted small nomargin">{{ _("Check the changes listed below. Validate to apply them to the documentation, or send the ticket back to the technician with a comment.") }}</p>
+      <textarea name="comment" rows="2" maxlength="500" placeholder="{{ _('Comment (required when sending back)') }}"></textarea></div>
+    <div class="btns col"><button class="btn primary" name="action" value="validate">✔ {{ _("Validate and apply") }}</button>
+      <button class="btn" name="action" value="reject" data-confirm="{{ _('Send the ticket back to the technician?') }}">↩ {{ _("Send back") }}</button></div>
+  </form>
+  {% else %}
+  <div class="flash info">{{ _("Waiting for validation by a supervisor or administrator who did not do the work.") }}</div>
+  {% endif %}
+{% endif %}
+
+<h2 class="section">{{ _("Switches") }}</h2>
+<div class="card flush scroll-x">
+<table class="tbl">
+  <thead><tr><th></th><th>{{ _("Switch") }}</th><th>{{ _("Area / location") }}</th><th>{{ _("Rack identifier") }}</th><th>{{ _("Changes waiting") }}</th><th>{{ _("Verified") }}</th><th></th></tr></thead>
+  {% for s in sws %}
+  <tr class="{{ 'tk-done' if s.done }}">
+    <td class="cb">{% if s.done %}<span class="tag approved">✓</span>{% else %}<span class="tag">…</span>{% endif %}</td>
+    <td><b>{{ s.name }}</b><div class="small muted">{{ s.ip }} · {{ s.model }}</div></td>
+    <td>{{ s.area }}{% if s.location %} · {{ s.location }}{% endif %}</td><td>{{ s.rack }}</td>
+    <td>{% if s.held %}<span class="tag pending">{{ s.held }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+    <td class="small">{% if s.done %}{{ user_label(users.get(s.done_by)) }} · {{ s.done_at }}{% if s.note %}<div><i>{{ s.note }}</i></div>{% endif %}{% endif %}</td>
+    <td class="r nowrap">
+      {% if can_work %}<a class="btn sm primary" href="{{ url_for('switch_view', sid=s.switch_id, ticket=t.id) }}">🔧 {{ _("Open for maintenance") }}</a>
+      {% else %}<a class="btn sm" href="{{ url_for('switch_view', sid=s.switch_id) }}">{{ _("Open switch") }}</a>{% endif %}
+      <a class="btn sm ghost" href="{{ url_for('switch_print', sid=s.switch_id, ticket=t.id) }}" target="_blank" rel="noopener" title="{{ _('Print the layout (verification sheet)') }}">🖨</a>
+      {% if can_work %}
+      <form method="post" action="{{ url_for('ticket_action', tid=t.id) }}" class="inline tk-done-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="switch_id" value="{{ s.switch_id }}">
+        {% if s.done %}<input type="hidden" name="undo" value="1"><button class="btn sm ghost" name="action" value="switch_done">{{ _("Undo") }}</button>
+        {% else %}<input name="comment" placeholder="{{ _('note (optional)') }}" size="14"><button class="btn sm" name="action" value="switch_done">✓ {{ _("Mark verified") }}</button>{% endif %}
+      </form>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+{% if changes %}
+<h2 class="section">{{ _("Documentation changes in this ticket") }} <span class="muted small">({{ changes|length }})</span></h2>
+<div class="card flush scroll-x">
+<table class="tbl compact">
+  <thead><tr><th>{{ _("Switch") }}</th><th>{{ _("Port") }}</th><th>{{ _("Changes") }}</th><th>{{ _("By") }}</th><th>{{ _("Status") }}</th></tr></thead>
+  {% for c in changes %}
+  <tr><td>{{ c.sw_name }}</td><td><a href="{{ url_for('switch_view', sid=c.switch_id) }}#port-{{ c.port_id }}"><b>{{ c.port_name }}</b></a></td>
+    <td class="small">{% for k, v in c.fields.items() if k != 'remote_switch' %}<div><span class="muted">{{ _(field_labels.get(k, k)) }}:</span> {% if c.old.get(k) %}<del>{{ val(k, c.old.get(k)) }}</del> → {% endif %}<ins>{{ val(k, v) }}</ins></div>{% endfor %}</td>
+    <td class="small">{{ c.by }}<div class="muted">{{ c.requested_at }}</div></td>
+    <td>{% if c.status == 'approved' %}<span class="tag approved">{{ _("applied") }}</span>{% else %}<span class="tag pending">{{ _("waiting for validation") }}</span>{% endif %}</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endif %}
+
+{% if can('maintenance', 'modify') and t.status in ('open', 'in_progress', 'pending_validation') %}
+<form method="post" action="{{ url_for('ticket_action', tid=t.id) }}" class="tk-cancel" data-confirm="{{ _('Cancel this ticket? Changes waiting in it are dropped.') }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input name="comment" placeholder="{{ _('reason') }}">
+  <button class="btn sm danger" name="action" value="cancel">{{ _("Cancel the ticket") }}</button></form>
+{% endif %}
+{% if can('maintenance', 'modify') %}
+<form method="post" action="{{ url_for('ticket_action', tid=t.id) }}" class="tk-cancel" data-confirm="{{ _('Delete this ticket? Its changes that were not validated are dropped; validated changes stay in the documentation.') }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm danger" name="action" value="delete">🗑 {{ _("Delete the ticket") }}</button></form>
+{% endif %}
+
+{% if history %}
+<details class="card history">
+  <summary><h2>{{ _("History") }} <span class="muted small">({{ history|length }})</span></h2></summary>
+  <table class="tbl compact">
+    {% for h in history %}<tr><td class="nowrap small">{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ _(actions.get(h.action, h.action)) }}</td>
+      <td class="small">{% for k, v in h.details.items() %}<div><span class="muted">{{ _(all_labels.get(k, k)) }}:</span> {% if v is sequence and v is not string and v|length == 2 %}{% if v[0] is not none and v[0] != '' %}<del>{{ val(k, v[0]) }}</del> → {% endif %}<ins>{{ val(k, v[1]) }}</ins>{% else %}{{ v }}{% endif %}</div>{% endfor %}</td></tr>{% endfor %}
+  </table>
+</details>
+{% endif %}
+{% endblock %}

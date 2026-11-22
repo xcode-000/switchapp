@@ -1,0 +1,13 @@
+[Unit]
+Description=SwitchDoc network switch documentation
+After=network.target
+
+[Service]
+User=switchdoc
+WorkingDirectory=/opt/switchdoc
+Environment=SWITCHDOC_DATA=/opt/switchdoc/data
+ExecStart=/opt/switchdoc/venv/bin/waitress-serve --listen=0.0.0.0:8080 app:app
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}{{ _("Groups") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1>{% if can('groups','edit') %}<a class="btn primary" href="{{ url_for('group_edit') }}">+ {{ _("New group") }}</a>{% endif %}</div>
+{% include "_settings_nav.html" %}
+<p class="muted">{{ _("Users only see the switches that belong to at least one of their groups (administrators and users with “all switches” see everything). A switch can be a member of several groups.") }}</p>
+<div class="card flush">
+<table class="tbl">
+  <thead><tr><th>{{ _("Group") }}</th><th>{{ _("Description") }}</th><th>{{ _("Switches") }}</th><th>{{ _("Users") }}</th><th></th></tr></thead>
+  {% for gr in groups %}
+  <tr>
+    <td><span class="gchip" style="--gc: {{ gr.color }}">{{ gr.name }}</span></td>
+    <td class="muted">{{ gr.description }}</td>
+    <td><a href="{{ url_for('dashboard', group=gr.id) }}">{{ gr.n_sw }}</a></td>
+    <td>{{ gr.n_users }}</td>
+    <td class="r">{% if can('groups','edit') %}<a class="btn sm" href="{{ url_for('group_edit', gid=gr.id) }}">{{ _("Edit") }}</a>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="empty">{{ _("No groups yet. Importing your workbook creates one group per Area.") }}</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

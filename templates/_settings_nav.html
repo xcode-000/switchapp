@@ -1,0 +1,18 @@
+{% set ep = request.endpoint %}
+<div class="subnav">
+  <a href="{{ url_for('settings') }}" class="{{ 'on' if ep == 'settings' }}">{{ _("Overview") }}</a>
+  {% if me.is_admin %}<a href="{{ url_for('companies_page') }}" class="{{ 'on' if ep in ('companies_page','company_edit') }}">{{ _("Companies & domain sign-in") }}</a>{% endif %}
+  {% if can('switches') %}<a href="{{ url_for('settings_switches') }}" class="{{ 'on' if ep == 'settings_switches' }}">{{ _("Switches") }}</a>{% endif %}
+  {% if can('assets') %}<a href="{{ url_for('assets_page') }}" class="{{ 'on' if ep == 'assets_page' }}">{{ _("Assets") }}</a>{% endif %}
+  {% if can('places') %}<a href="{{ url_for('places') }}" class="{{ 'on' if ep == 'places' }}">{{ _("Locations, racks & offices") }}</a>{% endif %}
+  {% if can('groups') %}<a href="{{ url_for('groups') }}" class="{{ 'on' if ep in ('groups','group_edit') }}">{{ _("Groups") }}</a>{% endif %}
+  {% if can('vlans') %}<a href="{{ url_for('vlans') }}" class="{{ 'on' if ep == 'vlans' }}">{{ _("VLANs") }}</a>{% endif %}
+  {% if can('port_types') %}<a href="{{ url_for('port_types') }}" class="{{ 'on' if ep == 'port_types' }}">{{ _("Port types") }}</a>{% endif %}
+  {% if can('models') %}<a href="{{ url_for('models') }}" class="{{ 'on' if ep in ('models','model_edit') }}">{{ _("Switch models") }}</a>{% endif %}
+  {% if can('switches','modify') %}<a href="{{ url_for('monitoring_settings') }}" class="{{ 'on' if ep == 'monitoring_settings' }}">{{ _("Monitoring") }}</a>{% endif %}
+  {% if can('ip_access') %}<a href="{{ url_for('ip_access') }}" class="{{ 'on' if ep == 'ip_access' }}">{{ _("Security") }}</a>{% endif %}
+  {% if can('maintenance', 'modify') %}<a href="{{ url_for('maintenance_settings') }}" class="{{ 'on' if ep == 'maintenance_settings' }}">{{ _("Maintenance tickets") }}</a>{% endif %}
+  {% if can('users') %}<a href="{{ url_for('users') }}" class="{{ 'on' if ep in ('users','user_edit') }}">{{ _("Users") }}</a>{% endif %}
+  {% if can('profiles') %}<a href="{{ url_for('profiles') }}" class="{{ 'on' if ep in ('profiles','profile_edit') }}">{{ _("Authorisation profiles") }}</a>{% endif %}
+  {% if can('audit') %}<a href="{{ url_for('audit_log') }}" class="{{ 'on' if ep == 'audit_log' }}">{{ _("Audit log") }}</a>{% endif %}
+</div>

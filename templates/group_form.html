@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}{{ grp.name if grp else _("New group") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Group %(name)s", name=grp.name) if grp else _("New group") }}</h1><a class="btn ghost" href="{{ url_for('groups') }}">{{ _("Cancel") }}</a></div>
+{% include "_settings_nav.html" %}
+<form method="post" class="card form-grid">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>{{ _("Group") }}</legend>
+    <label>{{ _("Name") }} *<input name="name" value="{{ grp.name if grp }}" required></label>
+    <label>{{ _("Colour") }}<input type="color" name="color" value="{{ grp.color if grp else default_color }}"></label>
+  </fieldset>
+  <fieldset>
+    <legend>&nbsp;</legend>
+    <label>{{ _("Description") }}<textarea name="description" rows="4">{{ grp.description if grp }}</textarea></label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Users in this group") }}</legend>
+    {% for u in users %}<div>{{ display_name(u) }} <span class="muted small">{{ u.username }}</span></div>{% else %}<p class="muted">{{ _("Nobody yet.") }}</p>{% endfor %}
+    {% if can('users','edit') %}<p class="small"><a href="{{ url_for('users') }}">{{ _("Assign users in Settings › Users") }}</a></p>{% endif %}
+  </fieldset>
+  <fieldset class="span-all">
+    <legend>{{ _("Member switches") }}</legend>
+    <div class="table-tools"><input type="search" id="swFilter" placeholder="{{ _('Filter switches by name or area…') }}"> <button type="button" class="btn sm" id="swAll">{{ _("Select visible") }}</button> <button type="button" class="btn sm ghost" id="swNone">{{ _("Clear visible") }}</button></div>
+    <div class="sw-picker tall">
+      {% for s in switches %}
+      <label class="check" data-t="{{ (s.name ~ ' ' ~ s.area)|lower }}"><input type="checkbox" name="switch_ids" value="{{ s.id }}" {{ 'checked' if s.id in members }}>
+        <span>{{ s.name }}<small class="muted">{{ s.area }}</small></span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn primary">{{ _("Save group") }}</button></div>
+</form>
+{% if grp and can('groups','modify') %}
+<form method="post" action="{{ url_for('group_delete', gid=grp.id) }}" class="danger-zone" data-confirm="{{ _('Delete group %(name)s? Switches are not deleted.', name=grp.name) }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">{{ _("Delete group") }}</button>
+</form>
+{% endif %}
+{% endblock %}

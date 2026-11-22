@@ -1,0 +1,1 @@
+<div class="langs" role="group" aria-label="{{ _('Language') }}">{% for code, name in languages.items() %}<a href="{{ url_for('set_lang', code=code) }}" class="{{ 'on' if code == lang }}" title="{{ name }}" lang="{{ code }}">{{ code|upper }}</a>{% endfor %}</div>

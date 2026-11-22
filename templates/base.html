@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ app_name }}{% endblock %} · {{ app_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='9' width='28' height='14' rx='3' fill='%231b2430'/><g fill='%2334d399'><rect x='6' y='13' width='4' height='6'/><rect x='12' y='13' width='4' height='6'/></g><g fill='%2360a5fa'><rect x='18' y='13' width='4' height='6'/></g><rect x='24' y='13' width='3' height='6' fill='%23475569'/></svg>">
+</head>
+<body>
+{% if me %}
+<header class="top">
+  <a class="brand" href="{{ url_for('dashboard') }}"><span class="logo"><i></i><i></i><i class="t"></i><i class="o"></i></span>{{ app_name }}</a>
+  {% if company %}{% if my_companies|length > 1 %}<details class="company-menu"><summary title="{{ _('Change company') }}">🏢 <b>{{ company.code or company.name }}</b> ▾</summary>
+    <div class="menu-list">{% for c in my_companies %}<a href="{{ url_for('company_switch', cid=c.id) }}" class="{{ 'on' if c.id == company.id }}">{{ c.name }}</a>{% endfor %}</div></details>
+  {% else %}<span class="company-one" title="{{ company.name }}">🏢 {{ company.code or company.name }}</span>{% endif %}{% endif %}
+  <nav>
+    {% set ep = request.endpoint or '' %}
+    {% if can('switches') %}<a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep in ('dashboard','switch_view','switch_edit','switch_replace') }}">{{ _("Switches") }}</a>{% endif %}
+    {% if can('assets') %}<a href="{{ url_for('assets_page') }}" class="{{ 'on' if ep == 'assets_page' }}">{{ _("Assets") }}</a>{% endif %}
+    {% if can('topology') %}<a href="{{ url_for('topology') }}" class="{{ 'on' if ep == 'topology' }}">{{ _("Topology") }}</a>{% endif %}
+    {% if can('ports', 'edit') %}<a href="{{ url_for('approvals') }}" class="{{ 'on' if ep == 'approvals' }}">{{ _("Approvals") if can('ports','modify') else _("My requests") }}{% if pending_count %} <span class="badge">{{ pending_count }}</span>{% endif %}</a>{% endif %}
+    {% if can('maintenance') %}{% set tn = tickets_note.todo + tickets_note.validate %}<a href="{{ url_for('maintenance', mine=1 if tickets_note.todo else None) }}" class="{{ 'on' if ep in ('maintenance', 'ticket_view', 'ticket_edit') }}">{{ _("Maintenance") }}<span class="badge" id="tkBadge"{% if not tn %} hidden{% endif %}>{{ tn }}</span></a>{% endif %}
+    {% if can('snmp') %}<a href="{{ url_for('snmp_page') }}" class="{{ 'on' if ep == 'snmp_page' }}">SNMP</a>{% endif %}
+    {% if can('credentials') %}<a href="{{ url_for('creds_list') }}" class="{{ 'on' if ep in ('creds_list','cred_edit') }}">{{ _("Credentials") }}</a>{% endif %}
+    {% if can('import_export') %}<a href="{{ url_for('import_page') }}" class="{{ 'on' if ep == 'import_page' }}">{{ _("Import / Export") }}</a>{% endif %}
+    {% if any_settings %}<a href="{{ url_for('settings') }}" class="{{ 'on' if ep == 'settings' or request.path.startswith('/settings') }}">{{ _("Settings") }}</a>{% endif %}
+  </nav>
+  {% if offline_count %}<a class="st-alert" id="stAlert" href="{{ url_for('dashboard', st='offline') }}" title="{{ _('Switches not answering') }}">● {{ _("%(n)s offline", n=offline_count) }}</a>{% endif %}
+  {% include "_lang.html" %}
+  <div class="me">{% if can('maintenance') %}<a href="{{ url_for('maintenance', mine=1) }}" class="bell" id="tkBell" title="{{ _('My maintenance tickets') }}"{% if not tickets_note.todo %} hidden{% endif %}>🔔<b id="tkBellN">{{ tickets_note.todo }}</b></a>{% endif %}<a href="{{ url_for('account') }}" title="{{ me.title }}">{{ display_name(me) }}</a> · <a href="{{ url_for('logout') }}">{{ _("Sign out") }}</a></div>
+</header>
+{% endif %}
+<main class="{% block mainclass %}{% endblock %}">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+{% if me and tickets_note.new %}
+<div class="tk-pop" id="tkPop" role="dialog" aria-modal="true">
+  <div class="tk-pop-box card">
+    <h2>🔔 {{ _("You have maintenance work to do") }}</h2>
+    <ul>{% for tk in tickets_note.new %}<li><a href="{{ url_for('ticket_view', tid=tk.id) }}"><b>#{{ tk.id }} {{ tk.title }}</b></a><div class="small muted">{{ _("planned") }} {{ tk.planned_start }} → {{ tk.planned_end }}</div></li>{% endfor %}</ul>
+    <div class="btns"><a class="btn primary" href="{{ url_for('ticket_view', tid=tickets_note.new[0].id) }}">{{ _("Open the ticket") }}</a><button class="btn ghost" type="button" id="tkLater">{{ _("Later") }}</button></div>
+  </div>
+</div>
+{% endif %}
+<script>window.TICKET_URL = "{{ url_for('ticket_view', tid=0) }}"; window.HAS_TICKETS = {{ 'true' if (me and can('maintenance')) else 'false' }};</script>
+<script>window.SESSION_TIMEOUT = {{ (session_timeout or 0) * 60 }}; window.LOGOUT_URL = "{{ url_for('logout', timeout=1) }}";</script>
+<script>window.CSRF = "{{ csrf_token() }}"; window.I18N = {{ js_i18n|tojson }};</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

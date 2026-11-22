@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}{{ _("Sign in") }}{% endblock %}{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<div class="card auth">
+  <div class="brand big"><span class="logo"><i></i><i></i><i class="t"></i><i class="o"></i></span>{{ app_name }}</div>
+  <p class="muted">{{ _("Network switch documentation") }}</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>{{ _("Username or email") }}<input name="username" autofocus required autocomplete="username"></label>
+    <label>{{ _("Password") }}<input name="password" type="password" required autocomplete="current-password"></label>
+    {% if dirs %}<label>{{ _("Sign in with") }}<select name="dir">
+      {% for d in dirs %}<option value="{{ d.id }}" {{ 'selected' if last == d.id|string or (not last and loop.first) }}>🔑 {{ d.label or d.company }}{% if d.netbios %} ({{ d.netbios }}){% endif %}</option>{% endfor %}
+      <option value="local" {{ 'selected' if last == 'local' }}>{{ _("Local SwitchDoc account") }}</option>
+    </select></label>{% endif %}
+    <button class="btn primary wide">{{ _("Sign in") }}</button>
+  </form>
+  <div class="auth-langs">{% include "_lang.html" %}</div>
+</div>
+{% endblock %}

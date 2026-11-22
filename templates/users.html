@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% block title %}{{ _("Users") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1>{% if can('users','edit') %}<a class="btn primary" href="{{ url_for('user_edit') }}">+ {{ _("New user") }}</a>{% endif %}</div>
+{% include "_settings_nav.html" %}
+<div class="filters chips">
+  <a class="chip {{ 'on' if scope != 'all' }}" href="{{ url_for('users') }}">{{ _("With a role in %(c)s", c=company.name) if company else _("Users") }}</a>
+  <a class="chip {{ 'on' if scope == 'all' }}" href="{{ url_for('users', scope='all') }}">{{ _("All users") }}</a>
+</div>
+<div class="card flush scroll-x">
+<table class="tbl sortable">
+  <thead><tr><th>{{ _("Name") }}</th><th>{{ _("Username") }}</th><th>{{ _("Email") }}</th><th>{{ _("Title") }}</th><th>{{ _("Language") }}</th><th>{{ _("Sign-in") }}</th><th>{{ _("Role in this company") }}</th><th>{{ _("Switch groups") }}</th><th>{{ _("All roles") }}</th><th>{{ _("Last sign-in") }}</th><th></th></tr></thead>
+  <tbody>
+  {% for u in users %}
+  <tr class="{{ 'inactive' if not u.active }}">
+    <td><b>{{ display_name(u) }}</b>{% if not u.active %} <span class="tag off">{{ _("disabled") }}</span>{% endif %}</td>
+    <td><code>{{ u.username }}</code></td>
+    <td>{% if u.email %}<a href="mailto:{{ u.email }}">{{ u.email }}</a>{% endif %}</td>
+    <td>{{ u.title }}</td>
+    <td>{{ languages.get(u.lang, '—') }}</td>
+    <td class="small">{% if u.auth_source == 'directory' %}<span class="tag">🔑 {{ u.dir_label or _("Domain") }}</span>{% else %}{{ _("Local") }}{% endif %}</td>
+    <td>{% if u.is_admin %}<span class="pill">{{ _("Administrator") }}</span>{% else %}{{ u.profile_name or '—' }}{% endif %}{% if u.role_source == 'ad' %} <span class="tag" title="{{ _('from an AD group') }}">AD</span>{% endif %}</td>
+    <td class="small">{% if u.is_admin or u.all_groups %}<b>{{ _("All switches") }}</b>{% else %}{{ u.group_names or _("— none (sees no switch)") }}{% endif %}</td>
+    <td class="small muted">{{ u.roles or '—' }}</td>
+    <td class="small muted">{{ u.last_login or _("never") }}</td>
+    <td class="r nowrap">{% if can('audit') %}<a class="btn sm ghost" href="{{ url_for('audit_log', user=u.username) }}" title="{{ _('Audit log') }}">⌕</a>{% endif %}{% if can('users','edit') and (not u.is_admin or me.is_admin) %}<a class="btn sm" href="{{ url_for('user_edit', uid=u.id) }}">{{ _("Edit") }}</a>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

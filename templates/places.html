@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block title %}{{ _("Locations, racks & offices") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1></div>
+{% include "_settings_nav.html" %}
+{% set ro = not can('places','edit') %}
+<p class="muted">{{ _("These lists feed the Location, Rack identifier and Office drop-downs of every switch. A rack or an office can belong to a location: when a location is chosen on a switch, only its racks and offices are offered. Renaming an entry renames it on every switch that uses it.") }}</p>
+<div class="seg places-tabs">
+  <a href="#location">{{ _("Locations") }} <b>{{ data.location|length }}</b></a>
+  <a href="#rack">{{ _("Racks") }} <b>{{ data.rack|length }}</b></a>
+  <a href="#office">{{ _("Offices") }} <b>{{ data.office|length }}</b></a>
+</div>
+<datalist id="areaList">{% for a in areas %}<option value="{{ a }}">{% endfor %}</datalist>
+
+{% macro loc_select(form_id, current) %}
+<select form="{{ form_id }}" name="location"><option value="">{{ _("— any location —") }}</option>
+  {% for l in data.location %}<option {{ 'selected' if l.name == current }}>{{ l.name }}</option>{% endfor %}
+  {% if current and current not in data.location|map(attribute='name') %}<option selected>{{ current }}</option>{% endif %}
+</select>
+{% endmacro %}
+
+{% for kind, title, second in [('location', _("Locations"), _("Area")), ('rack', _("Racks"), _("Location")), ('office', _("Offices"), _("Location"))] %}
+<h2 class="section" id="{{ kind }}">{{ title }}</h2>
+<div class="card flush scroll-x">
+<table class="tbl{{ ' ro' if ro }}">
+  <thead><tr><th>{{ _("Rack identifier") if kind == 'rack' else _("Name") }}</th><th>{{ second }}</th><th>{{ _("Description") }}</th><th>{{ _("Switches") }}</th><th></th></tr></thead>
+  {% for it in data[kind] %}{% set f = kind ~ it.id %}
+  <tr>
+    <td><input form="{{ f }}" name="name" value="{{ it.name }}" required></td>
+    <td>{% if kind == 'location' %}<input form="{{ f }}" name="area" value="{{ it.area }}" list="areaList">{% else %}{{ loc_select(f, it.location) }}{% endif %}</td>
+    <td><input form="{{ f }}" name="description" value="{{ it.description }}" class="w-wide"></td>
+    <td>{% if it.used %}<a href="{{ url_for('settings_switches', q=it.name) }}">{{ it.used }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+    <td class="r nowrap">
+      {% if not ro %}<form method="post" id="{{ f }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="id" value="{{ it.id }}"><button class="btn sm">{{ _("Save") }}</button></form>{% endif %}
+      {% if can('places','modify') %}<form method="post" action="{{ url_for('place_delete', kind=kind, pid=it.id) }}" class="inline" data-confirm="{{ _('Delete %(name)s?', name=it.name) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm danger" title="{{ _('Delete') }}" {{ 'disabled' if it.used }}>✕</button></form>{% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="empty">{{ _("Nothing yet.") }}</td></tr>{% endfor %}
+  {% if not ro %}{% set f = kind ~ 'new' %}
+  <tr class="new-row">
+    <td><input form="{{ f }}" name="name" required placeholder="{{ {'location': _('e.g. Floor 2'), 'rack': _('e.g. RCK1'), 'office': _('e.g. Accounting')}[kind] }}"></td>
+    <td>{% if kind == 'location' %}<input form="{{ f }}" name="area" list="areaList">{% else %}{{ loc_select(f, '') }}{% endif %}</td>
+    <td><input form="{{ f }}" name="description" class="w-wide"></td><td></td>
+    <td class="r"><form method="post" id="{{ f }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="{{ kind }}"><button class="btn sm primary">{{ _("Add") }}</button></form></td>
+  </tr>
+  {% endif %}
+</table>
+</div>
+{% endfor %}
+{% endblock %}

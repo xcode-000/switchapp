@@ -1,0 +1,51 @@
+{% extends "base.html" %}{% block title %}{{ _("Move %(name)s", name=a.name) }}{% endblock %}
+{% block content %}
+<div class="pagehead"><div><div class="crumbs"><a href="{{ url_for('assets_page') }}">{{ _("Assets") }}</a></div>
+  <h1>⇄ {{ _("Move %(name)s", name=a.name) }} <span class="muted small">{{ a.type_name }}</span></h1></div></div>
+<form method="post" class="card stack move-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ back }}">
+  <fieldset class="pick"><legend>{{ _("From") }}</legend>
+    {% for p in sources %}
+    <label class="check"><input type="radio" name="from" value="{{ p.id }}" {{ 'checked' if loop.first }}> <b>{{ p.sw_name }}</b> {{ _("port") }} <b>{{ p.name }}</b>
+      {% if p.equipment2 and p.equipment|lower == a.name|lower %}<span class="muted">· ↳ {{ p.equipment2 }}</span>{% endif %}
+      {% if p.equipment2|lower == a.name|lower %}<span class="muted">· {{ _("device behind %(x)s", x=p.equipment) }}</span>{% endif %}</label>
+    {% else %}<p class="muted">{{ _("Not connected to any port - it will simply be connected to the destination.") }}</p>{% endfor %}
+    {% if sources|selectattr('equipment2')|list %}<label class="check"><input type="checkbox" name="with_behind" value="1" checked> {{ _("Move the device behind it too (e.g. the PC plugged into the phone)") }}</label>{% endif %}
+  </fieldset>
+  <fieldset class="pick"><legend>{{ _("To") }}</legend>
+    <div class="grid2">
+      <label>{{ _("Switch") }}<select id="mvSw" required><option value="">{{ _("— choose —") }}</option>{% for s in sws %}<option value="{{ s.id }}">{{ s.name }}{% if s.area %} · {{ s.area }}{% endif %}</option>{% endfor %}</select></label>
+      <label>{{ _("Port") }}<select name="to" id="mvPort" required disabled><option value="">{{ _("— port —") }}</option></select></label>
+    </div>
+    <label class="check" id="mvReplace" hidden><input type="checkbox" name="replace" value="1"> <span></span></label>
+  </fieldset>
+  {% if tickets %}
+  <label>{{ _("Maintenance ticket") }}<select name="ticket"><option value="">{{ _("— none: normal change —") }}</option>{% for t in tickets %}<option value="{{ t.id }}">#{{ t.id }} {{ t.title }}</option>{% endfor %}</select></label>
+  {% endif %}
+  <p class="muted small">{% if direct %}{{ _("Both ports are updated at once. Inside a maintenance ticket the move is held until the ticket is validated.") }}{% else %}{{ _("The move is sent for approval: both ports change together when a supervisor approves it (or when the maintenance ticket is validated).") }}{% endif %}</p>
+  <div class="btns"><button class="btn primary">⇄ {{ _("Move") }}</button><a class="btn ghost" href="{{ back }}">{{ _("Cancel") }}</a></div>
+</form>
+<script>
+(() => {
+  const sw = document.getElementById('mvSw'), port = document.getElementById('mvPort'), rep = document.getElementById('mvReplace');
+  const T = {{ {'free': _('free'), 'disabled': _('disabled'), 'replace': _('replace: %(x)s will become free')}|tojson }};
+  let ports = [];
+  sw.addEventListener('change', async () => {
+    port.innerHTML = '<option value="">…</option>'; port.disabled = true; rep.hidden = true;
+    if (!sw.value) return;
+    ports = await (await fetch('/api/switch/' + sw.value + '/ports')).json();
+    port.innerHTML = '<option value="">' + {{ _("— port —")|tojson }} + '</option>' + ports.map(p => {
+      const busy = p.equipment ? p.equipment + (p.equipment2 ? ' ↳ ' + p.equipment2 : '') : '';
+      const txt = p.name + '  — ' + (p.status === 'disabled' ? T.disabled : (busy || T.free));
+      return `<option value="${p.id}" ${p.status === 'disabled' ? 'disabled' : ''}>${txt.replace(/</g, '&lt;')}</option>`;
+    }).join('');
+    port.disabled = false;
+  });
+  port.addEventListener('change', () => {
+    const p = ports.find(x => String(x.id) === port.value);
+    rep.hidden = !(p && p.equipment); rep.querySelector('input').checked = false;
+    if (p && p.equipment) rep.querySelector('span').textContent = T.replace.replace('%(x)s', p.equipment);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}{% block title %}{{ _("Topology") }}{% endblock %}{% block mainclass %}wide{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div><h1>{{ _("Topology") }}</h1>
+    <p class="muted small nomargin">{{ _("Built from the ports whose equipment type is Switch, Firewall or Router.") }} {{ _("%(s)s switches · %(c)s connections", s=data.nodes|selectattr('external', 'equalto', false)|list|length, c=data.edges|length) }}{% if data.issues %} · <a href="#issues">{{ _("%(n)s link inconsistencies", n=data.issues|length) }}</a>{% endif %}</p></div>
+</div>
+
+<div class="topo-tools card">
+  <label>{{ _("Layout") }}
+    <select id="tLayout">
+      <option value="tree">{{ _("Hierarchy (core on top)") }}</option>
+      <option value="force">{{ _("Organic (force)") }}</option>
+      <option value="rack">{{ _("Racks (switches inside their rack)") }}</option>
+      {% if saved %}<option value="saved">{{ _("Saved layout") }}</option>{% endif %}
+    </select></label>
+  <label>{{ _("Colour by") }}
+    <select id="tColor"><option value="area">{{ _("Area") }}</option><option value="group">{{ _("Group") }}</option><option value="layer">{{ _("Layer (L1/L2/L3)") }}</option></select></label>
+  <label>{{ _("Group") }}
+    <select id="tGroup"><option value="">{{ _("All") }}</option>{% for gr in groups %}<option>{{ gr.name }}</option>{% endfor %}</select></label>
+  <label>{{ _("Area") }}
+    <select id="tArea"><option value="">{{ _("All") }}</option>{% for a in data.nodes|map(attribute='area')|unique|sort if a %}<option>{{ a }}</option>{% endfor %}</select></label>
+  <label>{{ _("Find") }}<input type="search" id="tFind" placeholder="{{ _('Switch or device name…') }}" list="tNames"></label>
+  <label class="check"><input type="checkbox" id="tExt" checked> {{ _("Other devices") }}</label>
+  <label class="check"><input type="checkbox" id="tLabels" checked> {{ _("Port labels") }}</label>
+  <label class="check"><input type="checkbox" id="tAlone"> {{ _("Unlinked switches") }}</label>
+  <div class="grow"></div>
+  <button class="btn sm" id="tExpandAll" type="button" title="{{ _('Show the equipment connected to every switch') }}">+ {{ _("Expand all") }}</button>
+  <button class="btn sm" id="tCollapseAll" type="button">− {{ _("Collapse all") }}</button>
+  <button class="btn sm" id="tFit" type="button">{{ _("Fit") }}</button>
+  {% if can('topology', 'edit') %}<button class="btn sm" id="tSave" type="button" title="{{ _('Save the current node positions for everyone') }}">{{ _("Save layout") }}</button>{% endif %}
+  <button class="btn sm ghost" id="tSvg" type="button">{{ _("Download SVG") }}</button>
+</div>
+
+<div class="topo-wrap">
+  <svg id="topo" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{{ _('Switch topology diagram') }}">
+    <style>
+      .e path{stroke-linecap:round}
+      .e.warn .v{stroke:#f59e0b!important;stroke-dasharray:7 5}
+      .e.off .v{stroke-dasharray:3 4;opacity:.7}
+      .e:hover .v{filter:brightness(1.15);stroke-width:5}
+      .rack .rb{fill:var(--surface-2,#f8fafc);stroke:#475569;stroke-width:1.5}
+      .rack .rh{fill:#1e293b}
+      .rack .rail{stroke:#94a3b8;stroke-width:2;stroke-dasharray:2 4}
+      .rack .rt{fill:#fff;font:700 12px system-ui,sans-serif}
+      .rack .rn{fill:#cbd5e1;font:700 11px system-ui,sans-serif}
+      .rack .rs{fill:var(--muted,#64748b);font:500 10px system-ui,sans-serif}
+      .rack.ext .rb{stroke-dasharray:5 4;fill:transparent}
+      .rack.ext .rh{fill:#64748b}
+      .rack.norack .rh{fill:#9a3412}
+      .e text,.n text{font:600 11px system-ui,-apple-system,"Segoe UI",sans-serif}
+      .e .lbl rect{fill:var(--surface,#fff);stroke:var(--line-2,#cbd5e1)}
+      .e .lbl text{fill:var(--text,#0f172a);font-weight:500;font-size:10px}
+      .n rect.box{stroke:rgba(0,0,0,.25);stroke-width:1}
+      .n .nm{fill:#fff;font-size:12px;font-weight:700}
+      .n .ip{fill:rgba(255,255,255,.85);font-size:10px;font-weight:500}
+      .n.ext rect.box{fill:var(--surface,#fff)!important;stroke:var(--muted,#64748b);stroke-dasharray:4 3}
+      .n.ext .nm{fill:var(--muted,#64748b)}
+      .q .qsub{font-size:9px;font-weight:500;fill:#475569}
+      .q .qb{fill:var(--surface,#fff);stroke:#cbd5e1;stroke-width:1;fill-opacity:.92}
+      .q .qn{font:600 10px system-ui,sans-serif;fill:var(--text,#0f172a)}
+      .n.ext .ek{font-size:10px;font-weight:800}
+      .n .badge{fill:#0b1017;opacity:.55} .n .bt{fill:#fff;font-size:9px;font-weight:700}
+      .n.sel rect.box{stroke:#f59e0b;stroke-width:3}
+      .n.hit rect.box{stroke:#f59e0b;stroke-width:4}
+      .dim{opacity:.15}
+      .tog{cursor:pointer}
+      .tog rect{fill:#0f172a;stroke:#fff;stroke-width:1.5}
+      .tog.open rect{fill:#f59e0b}
+      .tog .tsign{fill:#fff;font:800 14px system-ui,sans-serif}
+      .tog.open .tsign{fill:#111827}
+      .tog .tcnt{fill:#fff;font:700 10px system-ui,sans-serif}
+      .tog.open .tcnt{fill:#111827}
+      .tog:hover rect{stroke:#f59e0b;stroke-width:2.5}
+      .ql{stroke:#94a3b8;stroke-width:1.2}
+      .ql.off{stroke-dasharray:3 3;opacity:.6}
+      .q{cursor:pointer}
+      .q .qt{font:800 9px system-ui,sans-serif;letter-spacing:.02em}
+      .q .qn{font:600 10px system-ui,sans-serif;fill:#0f172a}
+      .q.off{opacity:.5}
+      .q:hover .qb{stroke-width:2.5}
+      .q.sel .qb{stroke:#f59e0b!important;stroke-width:3}
+      .q.hit .qb{stroke:#f59e0b!important;stroke-width:4}
+      .qpl rect{fill:#fff;stroke:#cbd5e1}
+      .qpl text{font:600 9px system-ui,sans-serif;fill:#475569}
+      .ghost{opacity:.4}
+    </style>
+    <g id="vp"><g id="edges"></g><g id="nodes"></g></g>
+  </svg>
+  <aside class="topo-side card" id="tSide">
+    <p class="muted">{{ _("Click a switch or a connection to see details. Drag to move a switch, drag the background to pan, scroll to zoom.") }}</p>
+    <div class="legend col" id="tLegend"></div>
+  </aside>
+</div>
+<datalist id="tNames">{% for n in data.nodes %}<option value="{{ n.id }}">{% endfor %}{% for sw, lst in data.equipment.items() %}{% for q in lst %}<option value="{{ q.name }}">{{ sw }} · {{ q.port }}</option>{% endfor %}{% endfor %}</datalist>
+
+<h2 class="section" id="issues">{{ _("Link consistency check") }}</h2>
+{% if data.issues %}
+<p class="muted">{{ _("A connection should be documented on both switches: if port A says “to switch B port X”, port X on switch B should say “to switch A port A”. Remote-switch names that look like a typo of an existing switch are listed as unknown name.") }}</p>
+<div class="card flush scroll-x">
+  <table class="tbl compact">
+    <thead><tr><th>{{ _("Problem") }}</th><th>{{ _("Switch") }}</th><th>{{ _("Port") }}</th><th>{{ _("Connected switch") }}</th><th>{{ _("Remote port") }}</th><th>{{ _("Details") }}</th></tr></thead>
+    {% for i in data.issues %}
+    <tr><td><span class="tag {{ {'mismatch': 'warn', 'unknown': 'pending'}.get(i.kind, 'off') }}">{{ _("conflict") if i.kind == 'mismatch' else (_("unknown name") if i.kind == 'unknown' else _("one-sided")) }}</span></td>
+      <td><a href="#" class="tgo" data-n="{{ i.a }}">{{ i.a }}</a></td><td>{{ i.ap }}</td>
+      <td><a href="#" class="tgo" data-n="{{ i.b }}">{{ i.b }}</a>{% if i.suggest %} → <a href="#" class="tgo" data-n="{{ i.suggest }}">{{ i.suggest }}</a>?{% endif %}</td><td>{{ i.bp }}</td><td class="small">{{ i.msg }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="card empty">{{ _("All switch-to-switch links are documented consistently on both ends.") }} ✓</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+window.TOPO = {{ data|tojson }};
+window.TOPO_SAVED = {{ saved|tojson }};
+window.TOPO_TYPES = {{ ptypes|tojson }};
+window.TOPO_GROUPS = {{ groups|tojson }};
+window.TOPO_FOCUS = {{ focus|tojson }};
+window.SWITCH_URL = "{{ url_for('switch_view', sid=0) }}";
+window.ICON_URL = "{{ url_for('static', filename='icons/') }}";
+</script>
+<script src="{{ url_for('static', filename='topology.js') }}"></script>
+{% endblock %}

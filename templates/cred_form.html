@@ -1,0 +1,100 @@
+{% extends "base.html" %}{% block title %}{{ _("Edit %(name)s", name=prof.name) if prof else _("New credential profile") }}{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1>{{ _("Edit %(name)s", name=prof.name) if prof else _("New credential profile") }}</h1>
+  <a class="btn ghost" href="{{ url_for('creds_list') }}">{{ _("Cancel") }}</a>
+</div>
+<form method="post" class="card form-grid" autocomplete="off" id="credForm">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>{{ _("Profile") }}</legend>
+    <label>{{ _("Profile name") }} *<input name="name" value="{{ prof.name if prof }}" required placeholder="{{ _('e.g. Cisco access switches') }}"></label>
+    <label>{{ _("Notes") }}<textarea name="notes" rows="3">{{ prof.notes if prof }}</textarea></label>
+  </fieldset>
+  <fieldset class="span-all">
+    <legend>{{ _("Credentials") }}</legend>
+    <p class="muted small">{{ _("Add as many lines as the switch needs (console, enable, configuration terminal, SSH, web, SNMP…). Passwords and SNMP communities are encrypted. Leave a saved password empty to keep it.") }}</p>
+    <table class="tbl compact cred-rows">
+      <thead><tr><th>{{ _("Label") }}</th><th>{{ _("Kind") }}</th><th>{{ _("Value") }}</th><th></th></tr></thead>
+      <tbody id="credRows">
+      {% for f in fields %}{% set sec = f.kind in secret_kinds %}
+        <tr>
+          <td><input type="hidden" name="f_id" value="{{ f.id }}"><input name="f_label" value="{{ _(f.label) if f.label in suggestions else f.label }}" list="credLabels"></td>
+          <td><select name="f_kind" class="f-kind">{% for k, l in kinds %}<option value="{{ k }}" {{ 'selected' if f.kind == k }}>{{ _(l) }}</option>{% endfor %}</select></td>
+          <td>{% if sec %}<span class="pw"><input type="password" name="f_value" autocomplete="new-password" placeholder="{{ _('•••••• saved — leave blank to keep') if f.value }}"><button type="button" class="eye" title="{{ _('Show') }}">👁</button></span>
+              {% if f.value %}<label class="check small"><input type="checkbox" name="f_clear" value="{{ f.id }}"> {{ _("clear") }}</label>{% endif %}
+              {% else %}<input name="f_value" value="{{ f.value }}" autocomplete="off">{% endif %}</td>
+          <td class="nowrap"><button type="button" class="btn sm ghost up" title="{{ _('Move up') }}">↑</button><button type="button" class="btn sm ghost del" title="{{ _('Remove') }}">✕</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="table-tools">
+      <button type="button" class="btn sm" id="addRow">+ {{ _("Add a line") }}</button>
+      <select id="tplSel"><option value="">{{ _("Add the lines of a model…") }}</option>{% for name, fl in templates %}<option value="{{ loop.index0 }}">{{ _(name) }} ({{ fl|length }})</option>{% endfor %}</select>
+    </div>
+  </fieldset>
+  <datalist id="credLabels">{% for l in suggestions %}<option value="{{ _(l) }}">{% endfor %}</datalist>
+  <fieldset class="span-all">
+    <legend>{{ _("Switches using this profile") }}</legend>
+    <div class="table-tools"><input type="search" id="swFilter" placeholder="{{ _('Filter switches…') }}"> <button type="button" class="btn sm" id="swAll">{{ _("Select visible") }}</button> <button type="button" class="btn sm ghost" id="swNone">{{ _("Clear visible") }}</button></div>
+    <div class="sw-picker">
+      {% for s in switches %}
+      <label class="check" data-t="{{ (s.name ~ ' ' ~ s.area)|lower }}"><input type="checkbox" name="switch_ids" value="{{ s.id }}" {{ 'checked' if prof and s.cred_profile_id == prof.id }}>
+        <span>{{ s.name }}<small class="muted">{{ s.area }}</small></span></label>
+      {% endfor %}
+    </div>
+    <small class="muted">{{ _("A switch can have one profile. Ticking it here moves it from its previous profile.") }}</small>
+  </fieldset>
+  <div class="actions"><button class="btn primary">{{ _("Save profile") }}</button></div>
+</form>
+{% if prof and can('credentials','modify') %}
+<form method="post" action="{{ url_for('cred_delete', cid=prof.id) }}" class="danger-zone" data-confirm="{{ _('Delete profile %(name)s? Switches using it will have no credentials.', name=prof.name) }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">{{ _("Delete profile") }}</button>
+</form>
+{% endif %}
+<script>
+(() => {
+  const T = {{ kind_labels|tojson }};
+  const TPL = {{ templates|tojson }}.map(([n, fl]) => fl);
+  const LABELS = {{ label_map|tojson }};
+  const SECRET = {{ secret_kinds|list|tojson }};
+  const body = document.getElementById('credRows');
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function valueCell(kind) {
+    return SECRET.includes(kind)
+      ? '<span class="pw"><input type="password" name="f_value" autocomplete="new-password"><button type="button" class="eye" title="👁">👁</button></span>'
+      : '<input name="f_value" autocomplete="off">';
+  }
+  function addRow(label = '', kind = 'secret') {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="hidden" name="f_id" value=""><input name="f_label" value="${esc(LABELS[label] || label)}" list="credLabels"></td>
+      <td><select name="f_kind" class="f-kind">${Object.keys(T).map(k => `<option value="${k}" ${k === kind ? 'selected' : ''}>${esc(T[k])}</option>`).join('')}</select></td>
+      <td>${valueCell(kind)}</td>
+      <td class="nowrap"><button type="button" class="btn sm ghost up">↑</button><button type="button" class="btn sm ghost del">✕</button></td>`;
+    body.appendChild(tr);
+    return tr;
+  }
+  document.getElementById('addRow').onclick = () => addRow('', 'secret').querySelector('[name=f_label]').focus();
+  document.getElementById('tplSel').onchange = e => {
+    if (e.target.value === '') return;
+    [...body.rows].forEach(r => { if (!r.querySelector('[name=f_label]').value.trim() && !r.querySelector('[name=f_value]').value) r.remove(); });
+    const have = new Set([...body.querySelectorAll('[name=f_label]')].map(i => i.value.trim().toLowerCase()));
+    TPL[+e.target.value].forEach(([l, k]) => { if (!have.has((LABELS[l] || l).toLowerCase())) addRow(l, k); });
+    e.target.value = '';
+  };
+  body.addEventListener('click', e => {
+    const tr = e.target.closest('tr'); if (!tr) return;
+    if (e.target.closest('.del')) tr.remove();
+    if (e.target.closest('.up') && tr.previousElementSibling) tr.parentNode.insertBefore(tr, tr.previousElementSibling);
+  });
+  body.addEventListener('change', e => {   // kind changed: password <-> plain field
+    if (!e.target.matches('.f-kind')) return;
+    const td = e.target.closest('tr').cells[2], secret = SECRET.includes(e.target.value);
+    const inp = td.querySelector('input[name=f_value]');
+    if (secret !== (inp.type === 'password')) { const v = inp.value; td.innerHTML = valueCell(e.target.value); td.querySelector('input[name=f_value]').value = v; }
+  });
+  if (!body.rows.length) addRow('', 'user');
+})();
+</script>
+{% endblock %}

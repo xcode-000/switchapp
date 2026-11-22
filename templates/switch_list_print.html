@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="{{ lang }}"><head><meta charset="utf-8"><title>{{ _("Switch list") }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  body { font: 11px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+  .bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .bar button, .bar a { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 6px; border: 1px solid #0f766e; background: #0f766e; color: #fff; cursor: pointer; text-decoration: none; }
+  .bar a { background: #fff; color: #0f766e; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 10px; }
+  h1 { font-size: 20px; margin: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #94a3b8; padding: 4px 6px; text-align: left; }
+  th { background: #e2e8f0; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  td.num, th.num { text-align: right; } td.c { text-align: center; }
+  tr:nth-child(even) td { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  thead { display: table-header-group; } tr { page-break-inside: avoid; }
+  .foot { margin-top: 8px; color: #64748b; }
+  @media print { .bar { display: none; } body { padding: 0; } }
+</style></head>
+<body>
+<div class="bar"><button onclick="window.print()">🖨 {{ _("Print") }}</button><a href="{{ url_for('dashboard') }}">{{ _("Back to the switches") }}</a></div>
+<div class="head">
+  <div><h1>{{ _("Switch list") }}</h1><div>{{ _("%(n)s switches", n=rows|length) }}{% if filtered %} · {{ _("filtered / selected") }}{% endif %}</div></div>
+  <div style="text-align:right">{{ _("Printed on %(d)s by %(u)s", d=printed, u=display_name(me)) }}<br>SwitchDoc</div>
+</div>
+<table>
+  <thead><tr>{% for k, label in cols %}<th class="{{ 'num' if k == 'n_ports' }}">{{ _(label) }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for r in rows %}<tr>
+    {% for k, label in cols %}
+      {% if k == 'poe' %}<td class="c">{{ _("Yes") if r.poe else _("No") }}</td>
+      {% elif k == 'name' %}<td><b>{{ r.name }}</b></td>
+      {% elif k == 'n_ports' %}<td class="num">{{ r.n_ports }}</td>
+      {% else %}<td>{{ r[k] or '' }}</td>{% endif %}
+    {% endfor %}
+  </tr>{% endfor %}
+  </tbody>
+</table>
+<p class="foot">{{ _("Total ports: %(n)s", n=rows|sum(attribute='n_ports')) }}</p>
+</body></html>

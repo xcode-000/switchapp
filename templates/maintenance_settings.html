@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}{{ _("Maintenance tickets") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1></div>
+{% include "_settings_nav.html" %}
+<p class="muted">{{ _("%(n)s tickets in total · %(c)s closed (validated or cancelled) · %(a)s archived.", n=stats.n or 0, c=stats.closed or 0, a=stats.archived or 0) }}
+  {{ _("Archive and delete only touch closed tickets; open, in-progress and pending tickets are never affected. The date is the day the ticket was closed.") }}</p>
+<div class="grid2">
+  <form method="get" action="{{ url_for('maintenance_export') }}" class="card stack">
+    <h2>⬇ {{ _("Export to Excel") }}</h2>
+    <p class="muted small">{{ _("One sheet with the tickets, one with their switches, one with the documentation changes they contained.") }}</p>
+    <label>{{ _("Closed before") }}<input type="date" name="before" value="{{ today }}" required></label>
+    <label class="check"><input type="checkbox" name="all" value="1"> {{ _("Also the tickets that are not closed yet (created before that date)") }}</label>
+    <button class="btn primary">{{ _("Export") }}</button>
+  </form>
+  <form method="post" class="card stack">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <h2>🗄 {{ _("Archive") }}</h2>
+    <p class="muted small">{{ _("Archived tickets are kept but hidden from the Maintenance list. They can still be found with the search (tick “Archived”).") }}</p>
+    <label>{{ _("Closed before") }}<input type="date" name="before" value="{{ default_before }}" required></label>
+    <div class="btns"><button class="btn primary" name="action" value="archive">{{ _("Archive") }}</button>
+      {% if stats.archived %}<button class="btn ghost" name="action" value="unarchive" formnovalidate data-confirm="{{ _('Bring every archived ticket back to the list?') }}">{{ _("Restore all archived") }}</button>{% endif %}</div>
+  </form>
+  <form method="post" class="card stack purge">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <h2>🗑 {{ _("Delete") }}</h2>
+    <p class="muted small">{{ _("Permanently deletes closed tickets (export them first if you need to keep them). The documentation changes they applied stay, and the audit log keeps their history.") }}</p>
+    <label>{{ _("Closed before") }}<input type="date" name="before" value="{{ default_before }}" required></label>
+    <label>{{ _("Type DELETE to confirm") }}<input name="confirm" autocomplete="off" placeholder="DELETE"></label>
+    <button class="btn danger" name="action" value="delete" data-confirm="{{ _('Delete the closed tickets? This cannot be undone.') }}">{{ _("Delete") }}</button>
+  </form>
+</div>
+{% endblock %}

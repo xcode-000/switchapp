@@ -1,0 +1,9 @@
+services:
+  switchdoc:
+    build: .
+    container_name: switchdoc
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data

@@ -1,0 +1,84 @@
+{% extends "base.html" %}{% block title %}{{ usr.username if usr and usr.username else _("New user") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("User %(name)s", name=usr.username) if usr and usr.id else _("New user") }}</h1><a class="btn ghost" href="{{ url_for('users') }}">{{ _("Cancel") }}</a></div>
+{% include "_settings_nav.html" %}
+<form method="post" class="card form-grid" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>{{ _("Person") }}</legend>
+    <label>{{ _("First name") }}<input name="first_name" value="{{ usr.first_name if usr }}"></label>
+    <label>{{ _("Last name") }}<input name="last_name" value="{{ usr.last_name if usr }}"></label>
+    <label>{{ _("Email") }}<input name="email" type="email" value="{{ usr.email if usr }}"></label>
+    <label>{{ _("Title") }}<input name="title" value="{{ usr.title if usr }}"></label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Sign-in") }}</legend>
+    {% if domain %}
+    <label>{{ _("Username") }}<input value="{{ usr.username }}" disabled></label>
+    <p class="note">🔑 {{ _("Domain account: the password and the account are managed in Active Directory. Roles given by AD groups are updated at each sign-in; roles set here by hand are kept.") }}</p>
+    {% else %}
+    <label>{{ _("Username") }} *<input name="username" value="{{ usr.username if usr }}" required autocomplete="off"></label>
+    <label>{{ _("New password (leave blank to keep)") if usr and usr.id else _("Password") ~ " *" }}
+      <span class="pw"><input type="password" name="password" autocomplete="new-password" {{ '' if usr and usr.id else 'required' }}><button type="button" class="eye" title="{{ _('Show') }}">👁</button></span></label>
+    {% with pw_field='password', pw_user_field='username' %}{% include "_pw_hint.html" %}{% endwith %}
+    <div class="pw-mode">
+      <label class="check"><input type="radio" name="pw_mode" value="temporary" checked> {{ _("Temporary: the user must change it at the next sign-in") }}</label>
+      <label class="check"><input type="radio" name="pw_mode" value="permanent"> {{ _("Permanent") }}</label>
+    </div>
+    {% if usr and usr.must_change %}<p class="small"><span class="tag warn">{{ _("Temporary password - not changed yet") }}</span></p>{% endif %}
+    {% endif %}
+    <label>{{ _("Language") }}
+      <select name="lang"><option value="">{{ _("Browser language") }}</option>{% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if usr and usr.lang == code }}>{{ name }}</option>{% endfor %}</select></label>
+    <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if not usr or usr.active }}> {{ _("Account active (untick to block sign-in)") }}</label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Authorisation") }}</legend>
+    <label>{{ _("Role in %(c)s", c=company.name) if company else _("Authorisation profile") }}
+      <select name="profile_id">
+        <option value="">{{ _("— none (no access) —") }}</option>
+        {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if usr and usr.profile_id|string == p.id|string }}>{{ p.name }}</option>{% endfor %}
+      </select>
+      <small>{% if can('profiles') %}<a href="{{ url_for('profiles') }}" target="_blank">{{ _("See what each profile allows") }}</a>{% endif %}</small></label>
+    {% if me.is_admin %}
+    <label class="check"><input type="checkbox" name="is_admin" value="1" {{ 'checked' if usr and usr.is_admin }}> {{ _("Administrator — full access to every menu and every switch") }}</label>
+    {% endif %}
+    {% if me.is_admin or me.all_groups %}
+    <label class="check"><input type="checkbox" name="all_groups" value="1" id="allGroups" {{ 'checked' if usr and usr.all_groups }}> {{ _("Can see all switches (ignore groups)") }}</label>
+    {% endif %}
+    {% if usr and usr.role_source == 'ad' %}<p class="small"><span class="tag">{{ _("from an AD group") }}</span></p>{% endif %}
+  </fieldset>
+  {% if others %}
+  <fieldset class="span-all">
+    <legend>{{ _("Roles in the other companies") }}</legend>
+    <p class="muted small">{{ _("A user can have a different role in each company (e.g. supervisor in one, technician in another). Switch groups are chosen inside each company.") }}</p>
+    <table class="tbl compact">
+      <thead><tr><th>{{ _("Company") }}</th><th>{{ _("Role") }}</th><th>{{ _("Can see all switches (ignore groups)") }}</th><th></th></tr></thead>
+      <tbody>{% for c in others %}<tr>
+        <td><b>{{ c.name }}</b>{% if not c.active %} <span class="tag off">{{ _("inactive") }}</span>{% endif %}</td>
+        <td><select name="role_{{ c.id }}"><option value="">{{ _("— none (no access) —") }}</option>{% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if c.role and c.role.profile_id == p.id }}>{{ p.name }}</option>{% endfor %}</select></td>
+        <td><input type="checkbox" name="allg_{{ c.id }}" value="1" {{ 'checked' if c.role and c.role.all_groups }}></td>
+        <td>{% if c.role and c.role.source == 'ad' %}<span class="tag">{{ _("from an AD group") }}</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </fieldset>
+  {% endif %}
+  <fieldset class="span-all" id="groupBox">
+    <legend>{{ _("Switch groups") }}{% if company %} · {{ company.name }}{% endif %}</legend>
+    <p class="muted small">{{ _("The user only sees switches that belong to at least one of these groups.") }}</p>
+    <div class="group-picker">
+      {% for gr in groups %}<label class="gcheck" style="--gc: {{ gr.color }}"><input type="checkbox" name="group_ids" value="{{ gr.id }}" {{ 'checked' if gr.id in member }}> {{ gr.name }}</label>
+      {% else %}<span class="muted">{{ _("No groups yet.") }}</span>{% endfor %}
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn primary">{{ _("Save user") }}</button></div>
+</form>
+{% if usr and usr.id and usr.id != me.id and can('users','modify') %}
+<form method="post" action="{{ url_for('user_delete', uid=usr.id) }}" class="danger-zone" data-confirm="{{ _('Delete user %(name)s? Tip: you can also just untick “Account active”.', name=usr.username) }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">{{ _("Delete user") }}</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>
+(() => { const a = document.getElementById('allGroups'), b = document.getElementById('groupBox');
+  if (!a) return; const upd = () => b.classList.toggle('dim', a.checked); a.addEventListener('change', upd); upd(); })();
+</script>{% endblock %}

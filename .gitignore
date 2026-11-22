@@ -1,0 +1,10 @@
+# SwitchDoc runtime data: databases and encryption keys never go to Git
+data/
+*.db
+*.db-wal
+*.db-shm
+*.key
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,0 +1,3 @@
+<ul class="pw-hint" data-for="{{ pw_field }}"{% if pw_user_field %} data-user="{{ pw_user_field }}"{% endif %}>
+  {% for key, text, rx in pw_rules[0] %}<li data-rule="{{ key }}"{% if rx %} data-rx="{{ rx }}"{% endif %}{% if key == 'len' %} data-min="{{ pw_rules[1] }}"{% endif %}>{{ text }}</li>{% endfor %}
+</ul>

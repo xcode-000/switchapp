@@ -1,0 +1,137 @@
+{% extends "base.html" %}{% block title %}{{ _("Switches") }}{% endblock %}
+{% block scripts %}<script>
+(() => {
+  const boxes = [...document.querySelectorAll('.swSel')], all = document.getElementById('swAllSel');
+  const bar = document.getElementById('expBar'), cnt = document.getElementById('expCount'), btn = document.getElementById('expBtn');
+  const base = {{ url_for('switches_export')|tojson }};
+  function upd() {
+    const ids = boxes.filter(b => b.checked).map(b => b.value);
+    bar.hidden = !ids.length; cnt.textContent = ids.length;
+    btn.href = base + '?ids=' + ids.join(',');
+    document.querySelectorAll('a.list-link').forEach(l => { l.href = ids.length ? l.dataset.base.split('?')[0] + '?ids=' + ids.join(',') : l.dataset.base; });
+    boxes.forEach(b => b.closest('tr').classList.toggle('picked', b.checked));
+  }
+  boxes.forEach(b => b.addEventListener('change', upd));
+  all.addEventListener('change', () => { boxes.forEach(b => { if (!b.closest('tr').hidden) b.checked = all.checked; }); upd(); });
+  document.getElementById('expClear').onclick = () => { boxes.forEach(b => b.checked = false); all.checked = false; upd(); };
+})();
+</script>{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1>{{ _("Switches") }}</h1>
+  <div class="btns">
+    <details class="menu">
+      <summary class="btn">{{ _("Switch list") }} ▾</summary>
+      <div class="menu-pop">
+        <a href="{{ url_for('switches_list_export', **request.args) }}" class="list-link" data-base="{{ url_for('switches_list_export', **request.args) }}">⤓ {{ _("Export the list to Excel") }}</a>
+        <a href="{{ url_for('switches_list_print', **request.args) }}" class="list-link" data-base="{{ url_for('switches_list_print', **request.args) }}" target="_blank" rel="noopener">🖨 {{ _("Print the list") }}</a>
+        <span class="menu-note muted small">{{ _("Name, model, serial, IP, location, rack, ports, PoE and in-service date - of the selected switches, or of all the switches shown.") }}</span>
+      </div>
+    </details>
+    {% if can('switches', 'edit') %}<a class="btn primary" href="{{ url_for('switch_edit') }}">+ {{ _("Add switch") }}</a>{% endif %}
+  </div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><b>{{ stats.sw }}</b><span>{{ _("switches you can see") }}</span></div>
+  <div class="tile"><b>{{ stats.ports }}</b><span>{{ _("ports documented") }}</span></div>
+  <div class="tile ok"><b>{{ stats.active }}</b><span>{{ _("active ports") }}</span></div>
+  <div class="tile off"><b>{{ stats.disabled }}</b><span>{{ _("disabled ports") }}</span></div>
+  <div class="tile trunk"><b>{{ stats.trunks }}</b><span>{{ _("trunk ports") }}</span></div>
+</div>
+
+{% if mon_on %}
+<div class="tiles st-tiles">
+  {% for k in ['online', 'offline', 'slow', 'maint', 'unknown', 'off'] if mon_counts.get(k) or k in ('online', 'offline') %}
+  <a class="tile st-{{ k }}{{ ' on' if st_filter == k }}" href="{{ url_for('dashboard', st=None if st_filter == k else k, q=q or None, area=area or None, group=group or None) }}">
+    <b>{{ mon_counts.get(k, 0) }}</b><span>{{ _(mon_labels[k]) }}</span></a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if dup_ip or dup_serial %}
+<details class="warn">
+  <summary>⚠ {{ _("%(a)s duplicate IP addresses and %(b)s duplicate serial numbers found", a=dup_ip|length, b=dup_serial|length) }}</summary>
+  <ul>
+  {% for ip, names in dup_ip.items() %}<li>{{ _("IP %(ip)s is used by %(names)s", ip=ip, names=names|join(', ')) }}</li>{% endfor %}
+  {% for s, names in dup_serial.items() %}<li>{{ _("Serial %(s)s is used by %(names)s", s=s, names=names|join(', ')) }}</li>{% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ _('Search switch name, IP, serial, model… or a device / PC name plugged into a port') }}">
+  <select name="group" onchange="this.form.submit()">
+    <option value="">{{ _("All my groups") }}</option>
+    {% for gr in groups %}<option value="{{ gr.id }}" {{ 'selected' if gr.id|string == group }}>{{ gr.name }}</option>{% endfor %}
+  </select>
+  <select name="area" onchange="this.form.submit()">
+    <option value="">{{ _("All areas") }}</option>
+    {% for a in areas %}<option {{ 'selected' if a == area }}>{{ a }}</option>{% endfor %}
+  </select>
+  <button class="btn">{{ _("Search") }}</button>
+  {% if st_filter %}<input type="hidden" name="st" value="{{ st_filter }}">{% endif %}
+  {% if q or area or group or st_filter %}<a class="btn ghost" href="{{ url_for('dashboard') }}">{{ _("Clear") }}</a>{% endif %}
+</form>
+
+{% if port_hits %}
+<div class="card">
+  <h2>{{ _("Ports matching “%(q)s”", q=q) }}</h2>
+  <div class="scroll-x"><table class="tbl compact">
+    <thead><tr><th>{{ _("Switch") }}</th><th>{{ _("Port") }}</th><th>{{ _("Status") }}</th><th>{{ _("Type") }}</th><th>{{ _("VLAN") }}</th><th>{{ _("Patch panel") }}</th><th>{{ _("Connected equipment") }}</th><th>{{ _("User") }}</th><th>{{ _("Remote") }}</th></tr></thead>
+    {% for p in port_hits %}
+    <tr><td><a href="{{ url_for('switch_view', sid=p.sid) }}#port-{{ p.id }}">{{ p.switch_name }}</a></td><td>{{ p.name }}</td>
+      <td><span class="dot {{ p.status }}"></span>{{ _("Active") if p.status=='active' else _("Disabled") }}</td>
+      <td>{{ p.ptype }}</td><td>{{ p.vlan }}</td><td>{{ p.patch_port }}</td><td>{{ p.equipment }}</td><td>{{ p.user }}</td>
+      <td>{{ p.remote_switch }}{% if p.remote_port %} : {{ p.remote_port }}{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+
+<div class="card flush">
+<div class="export-bar" id="expBar" hidden>
+  <b>{{ _("Selected:") }} <span id="expCount">0</span></b>
+  <a class="btn sm primary" id="expBtn" href="#">⤓ {{ _("Export selected to Excel") }}</a>
+  <button type="button" class="btn sm ghost" id="expClear">{{ _("Clear selection") }}</button>
+  <span class="muted small">{{ _("One sheet per switch, laid out like the switch page.") }}</span>
+</div>
+<table class="tbl sw-list sortable sw-select">
+  <thead><tr>
+    <th class="cb" data-nosort><input type="checkbox" id="swAllSel" title="{{ _('Select all visible') }}"></th>
+    <th>{{ _("Switch") }}</th>{% if mon_on %}<th>{{ _("Status") }}</th><th data-nosort>{{ _("Last 24 h") }}</th>{% endif %}<th>{{ _("Area / location") }}</th><th>{{ _("Office") }}</th><th>{{ _("IP address") }}</th><th>{{ _("Model") }}</th><th>{{ _("Serial") }}</th><th>{{ _("PoE") }}</th><th data-num>{{ _("Ports (active / total)") }}</th><th>{{ _("Groups") }}</th>{% if can('credentials') %}<th>{{ _("Credentials") }}</th>{% endif %}
+  </tr></thead>
+  <tbody>
+  {% for s in switches %}
+  <tr data-href="{{ url_for('switch_view', sid=s.id) }}">
+    <td class="cb"><input type="checkbox" class="swSel" value="{{ s.id }}" aria-label="{{ s.name }}"></td>
+    <td><a class="swname" href="{{ url_for('switch_view', sid=s.id) }}">{{ s.name }}</a>{% if s.rack %}<div class="sub">{{ s.rack }}</div>{% endif %}</td>
+    {% if mon_on %}{% set m = mon[s.id] %}<td data-v="{{ {'offline': 0, 'slow': 1, 'maint': 2, 'online': 3}.get(m.state, 4) }}"><span class="st-badge st-{{ m.state }}" data-st-sid="{{ s.id }}" title="{{ m.last and _('last check %(t)s', t=m.last[11:19]) or '' }}"><i></i><span class="st-l">{{ m.label }}</span></span>
+      <div class="sub st-since" data-st-since="{{ s.id }}">{% if m.ticket %}#{{ m.ticket }} · {% endif %}{% if m.since %}{{ _("for %(d)s", d=m.since) }}{% endif %}{% if m.rtt is not none and m.state in ('online', 'slow') %} · {{ m.rtt }} ms{% endif %}{% if m.rebooted %} · ↻ {{ m.rebooted }}{% endif %}</div></td>
+    <td>{% if mon_hist.get(s.id) and m.state != 'off' %}<div class="spark" title="{{ _('Last 24 hours, one bar per hour') }}">{% for x in mon_hist[s.id] %}<i class="st-{{ x }}"></i>{% endfor %}</div>{% endif %}</td>{% endif %}
+    <td>{{ s.area }}{% if s.location %}<div class="sub">{{ s.location }}</div>{% endif %}</td>
+    <td>{{ s.designation }}</td>
+    <td><code class="{{ 'bad' if s.ip in dup_ip }}">{{ s.ip }}</code></td>
+    <td>{{ s.model }} <span class="layer l-{{ (s.layer or 'L3')|lower }}">{{ s.layer or 'L3' }}</span>{% if s.sfp %} <span class="layer">{{ s.sfp_count or '' }}{{ '×' if s.sfp_count }}SFP</span>{% endif %}</td>
+    <td><span class="{{ 'bad' if s.serial and s.serial.upper() in dup_serial }}">{{ s.serial }}</span></td>
+    <td>{{ _("Yes") if s.poe else '' }}</td>
+    <td data-v="{{ s.n_active }}">
+      {% if s.n_ports %}
+      <div class="meter" title="{{ _('%(a)s active, %(d)s disabled, %(t)s trunk', a=s.n_active, d=s.n_ports - s.n_active, t=s.n_trunk) }}"><i style="width:{{ (100 * s.n_active / s.n_ports)|round|int }}%"></i></div>
+      <span class="sub">{{ s.n_active }} / {{ s.n_ports }}{% if s.n_trunk %} · {{ _("%(n)s trunk", n=s.n_trunk) }}{% endif %}</span>
+      {% else %}<span class="muted">{{ _("no ports") }}</span>{% endif %}
+    </td>
+    <td>{% for gr in s.groups %}<span class="gchip" style="--gc: {{ gr.color }}">{{ gr.name }}</span>{% else %}<span class="muted small">{{ _("none") }}</span>{% endfor %}</td>
+    {% if can('credentials') %}<td>{% if s.cred_name %}<span class="pill">{{ s.cred_name }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>{% endif %}
+  </tr>
+  {% else %}
+  <tr><td colspan="13" class="empty">
+    {% if stats.sw == 0 and not (me.is_admin or me.all_groups) %}{{ _("You are not a member of any switch group yet, so no switches are visible. Ask an administrator to add you to a group.") }}
+    {% else %}{{ _("No switches found.") }}{% endif %}
+  </td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">{{ _("%(n)s switches shown · click a column header to sort · disabled switches are listed in Settings › Switches", n=switches|length) }}</p>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}{{ _("Settings") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Settings") }}{% if company %} <span class="muted small">· {{ company.name }}</span>{% endif %}</h1>
+{% include "_settings_nav.html" %}
+{% set cards = [
+    ('switches', 'settings_switches', _("Switches"), _("Every defined switch: create new switches, disable / re-enable them, replace hardware, export one switch to Excel.")),
+    ('assets', 'assets_page', _("Assets & equipment types"), _("Equipment types (PC, phone, printer, access point…) and the unique asset names offered in the Connected equipment drop-down of every port.")),
+    ('places', 'places', _("Locations, racks & offices"), _("The lists behind the Location, Rack identifier and Office drop-downs of each switch.")),
+    ('groups', 'groups', _("Groups"), _("Group switches (by building, department, team…). A switch can be in several groups. Users only see switches of their groups.")),
+    ('vlans', 'vlans', _("VLANs"), _("VLAN numbers, names, subnets and DHCP. They are the choices of the port VLAN drop-down.")),
+    ('port_types', 'port_types', _("Port types"), _("The choices of the port Type drop-down and the colour used on the front panel and topology.")),
+    ('models', 'models', _("Switch models"), _("Vendor, Layer 1 / 2 / 3, PoE, SFP ports and default port count for each model.")),
+    ('ip_access', 'ip_access', _("Security"), _("Session timeout (sign-out after inactivity) and the IP addresses, subnets or ranges allowed to open SwitchDoc.")),
+    ('maintenance', 'maintenance_settings', _("Maintenance tickets"), _("Export, archive or delete closed maintenance tickets older than a date.")),
+    ('users', 'users', _("Users"), _("First name, last name, email, title, language, authorisation profile and switch groups.")),
+    ('profiles', 'profiles', _("Authorisation profiles"), _("No access / View / Edit / Modify for every menu. Edit on Ports = changes need approval.")),
+    ('audit', 'audit_log', _("Audit log"), _("Who signed in, who viewed passwords or exported data, what authorisations and documentation were changed.")),
+] %}
+<div class="setting-cards">
+  {% if me.is_admin %}<a class="card setting-card" href="{{ url_for('companies_page') }}">
+    <div class="sc-head"><h2>{{ _("Companies & domain sign-in") }}</h2><span class="count">{{ counts.companies }}</span></div>
+    <p class="muted">{{ _("Each company has its own documentation. Connect each company to its Active Directory and map AD groups to roles.") }}</p>
+  </a>{% endif %}
+  {% if can('switches', 'modify') %}<a class="card setting-card" href="{{ url_for('monitoring_settings') }}">
+    <div class="sc-head"><h2>{{ _("Switch status") }}</h2><span class="count">{{ _("On") if counts.monitoring else _("Off") }}</span></div>
+    <p class="muted">{{ _("Ping the switches in the background and show online / slow / offline on the list, the switch page and the topology. Optional email alerts. No tickets are created.") }}</p>
+  </a>{% endif %}
+  {% for key, ep, title, text in cards if can(key, 'modify' if key == 'maintenance' else 'view') %}
+  <a class="card setting-card" href="{{ url_for(ep) }}">
+    <div class="sc-head"><h2>{{ title }}</h2><span class="count">{{ counts[key] }}</span></div>
+    <p class="muted">{{ text }}</p>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

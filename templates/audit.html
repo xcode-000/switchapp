@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block title %}{{ _("Audit log") }}{% endblock %}
+{% macro val(k, v) %}{% set x = show(k, v) %}{% if x == "" %}<span class="muted">—</span>{% else %}{{ x }}{% endif %}{% endmacro %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1>
+  {% if can('audit','edit') %}<a class="btn primary" href="{{ url_for('audit_export', **args) }}" title="{{ _('Exports the entries matching the current filters') }}">⤓ {{ _("Export to Excel") }}{% if args %} ({{ _("filtered") }}){% endif %}</a>{% endif %}</div>
+{% include "_settings_nav.html" %}
+<p class="muted">{{ _("Every sign-in, password view, export, authorisation change and documentation change is recorded here. Entries cannot be edited or deleted from the application.") }}</p>
+<form class="card audit-filters" method="get">
+  <label>{{ _("Category") }}<select name="cat"><option value="">{{ _("All") }}</option>{% for k, l in categories %}<option value="{{ k }}" {{ 'selected' if args.get('cat') == k }}>{{ _(l) }}</option>{% endfor %}</select></label>
+  <label>{{ _("Action") }}<select name="action"><option value="">{{ _("All") }}</option>{% for a in actions_used %}<option value="{{ a }}" {{ 'selected' if args.get('action') == a }}>{{ _(actions.get(a, a)) }}</option>{% endfor %}</select></label>
+  <label>{{ _("User") }}<select name="user"><option value="">{{ _("All") }}</option>{% for u in usernames %}<option {{ 'selected' if args.get('user') == u }}>{{ u }}</option>{% endfor %}</select></label>
+  <label>{{ _("From") }}<input type="date" name="frm" value="{{ args.get('frm', '') }}"></label>
+  <label>{{ _("To") }}<input type="date" name="to" value="{{ args.get('to', '') }}"></label>
+  <label class="grow">{{ _("Text (switch, object, details, IP)") }}<input type="search" name="q" value="{{ args.get('q', '') }}"></label>
+  <div class="btns"><button class="btn primary">{{ _("Filter") }}</button>{% if args %}<a class="btn ghost" href="{{ url_for('audit_log') }}">{{ _("Clear") }}</a>{% endif %}</div>
+</form>
+<p class="muted small">{{ _("%(n)s entries", n=total) }}{% if pages > 1 %} · {{ _("page %(p)s of %(t)s", p=page, t=pages) }}{% endif %}</p>
+<div class="card flush scroll-x">
+<table class="tbl compact audit">
+  <thead><tr><th>{{ _("Date") }}</th><th>{{ _("User") }}</th><th>{{ _("Action") }}</th><th>{{ _("Object") }}</th><th>{{ _("Details") }}</th><th>{{ _("IP") }}</th></tr></thead>
+  {% for r in rows %}
+  <tr class="cat-{{ r.category }} act-{{ r.action }}">
+    <td class="nowrap">{{ r.ts }}</td>
+    <td>{% if r.username %}<a href="{{ url_for('audit_log', user=r.username) }}">{{ r.username }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td><span class="tag cat cat-{{ r.category }}">{{ _(dict(categories).get(r.category, r.category)) }}</span><div><b>{{ _(actions.get(r.action, r.action)) }}</b></div></td>
+    <td>{% if r.target_type == 'switch' and r.target_id %}<a href="{{ url_for('switch_view', sid=r.target_id) }}">{{ r.target_name }}</a>{% else %}{{ r.target_name }}{% endif %}</td>
+    <td class="small details">{% for k, v in r.details.items() %}<div><span class="muted">{{ _(labels.get(k, k)) }}:</span> {% if v is sequence and v is not string and v|length == 2 %}{% if v[0] is not none and v[0] != '' %}<del>{{ val(k, v[0]) }}</del> → {% endif %}<ins>{{ val(k, v[1]) }}</ins>{% else %}{{ v }}{% endif %}</div>{% endfor %}</td>
+    <td class="small muted nowrap">{{ r.ip }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="empty">{{ _("No entries.") }}</td></tr>{% endfor %}
+</table>
+</div>
+{% if pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}<a class="btn sm" href="{{ url_for('audit_log', page=page-1, **args) }}">← {{ _("Previous") }}</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn sm" href="{{ url_for('audit_log', page=page+1, **args) }}">{{ _("Next") }} →</a>{% endif %}
+</div>
+{% endif %}
+{% if can('audit','modify') %}
+<form method="post" action="{{ url_for('audit_purge') }}" class="card purge" data-confirm="{{ _('Permanently delete all audit entries before the chosen date? Export them first if you need to keep them.') }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="grow"><h2>{{ _("Purge old entries") }}</h2>
+    <p class="muted small">{{ _("Deletes every entry older than the chosen date. The purge itself is recorded. Oldest entry: %(d)s", d=oldest or '—') }}</p></div>
+  <label>{{ _("Delete entries before") }}<input type="date" name="before" max="{{ today }}" required></label>
+  <button class="btn danger">{{ _("Purge") }}</button>
+</form>
+{% endif %}
+{% endblock %}

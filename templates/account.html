@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% block title %}{{ _("My account") }}{% endblock %}
+{% block content %}
+<h1>{{ _("My account") }}</h1>
+<div class="grid2">
+  <div class="card">
+    <h2>{{ display_name(me) }}</h2>
+    <dl class="dl">
+      <dt>{{ _("Username") }}</dt><dd>{{ me.username }}</dd>
+      <dt>{{ _("Email") }}</dt><dd>{{ me.email or '—' }}</dd>
+      <dt>{{ _("Title") }}</dt><dd>{{ me.title or '—' }}</dd>
+      <dt>{{ _("Language") }}</dt><dd>{% include "_lang.html" %}</dd>
+      <dt>{{ _("Sign-in") }}</dt><dd>{% if me.auth_source == 'directory' %}🔑 {{ _("Domain account (Active Directory)") }}{% else %}{{ _("Local SwitchDoc account") }}{% endif %}</dd>
+      {% if my_companies|length > 1 %}<dt>{{ _("Companies") }}</dt><dd>{% for c in my_companies %}<span class="pill{{ ' on' if company and c.id == company.id }}">{{ c.name }}</span> {% endfor %}</dd>{% endif %}
+      <dt>{{ _("Role in %(c)s", c=company.name) if company else _("Authorisation profile") }}</dt><dd>{% if me.is_admin %}<span class="pill">{{ _("Administrator (full access)") }}</span>{% else %}{{ profile.name if profile else _("None — ask an administrator") }}{% endif %}</dd>
+      <dt>{{ _("Switch groups") }}</dt><dd>{% if me.is_admin or me.all_groups %}{{ _("All switches") }}{% else %}{% for gr in groups %}<span class="gchip" style="--gc: {{ gr.color }}">{{ gr.name }}</span>{% else %}<span class="muted">{{ _("None — you cannot see any switch") }}</span>{% endfor %}{% endif %}</dd>
+    </dl>
+    <p class="muted small">{{ _("Ask an administrator to change your name, profile or groups.") }}</p>
+  </div>
+  {% if me.auth_source == 'directory' %}
+  <div class="card">
+    <h2>{{ _("Password") }}</h2>
+    <p>{{ _("You sign in with your Windows domain account: change your password in Windows (Ctrl+Alt+Del › Change a password) - SwitchDoc always uses the current one.") }}</p>
+  </div>
+  {% else %}
+  <form method="post" class="card">
+    <h2>{{ _("Change my password") }}</h2>
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>{{ _("Current password") }}<input type="password" name="current" required></label>
+    <label>{{ _("New password") }}<span class="pw"><input type="password" name="new" required autocomplete="new-password" data-username="{{ me.username }}"><button type="button" class="eye" title="{{ _('Show') }}">👁</button></span></label>
+    {% with pw_field='new' %}{% include "_pw_hint.html" %}{% endwith %}
+    <label>{{ _("Confirm the new password") }}<input type="password" name="confirm" required autocomplete="new-password"></label>
+    <button class="btn primary">{{ _("Update password") }}</button>
+  </form>
+  {% endif %}
+</div>
+<div class="card flush scroll-x">
+  <table class="tbl perm-matrix">
+    <thead><tr><th>{{ _("Menu") }}</th>{% for k in level_keys %}<th class="c">{{ _(level_names[k]) }}</th>{% endfor %}</tr></thead>
+    {% for key, label, help in menus %}
+    <tr><td><b>{{ _(label) }}</b><div class="sub">{{ _(help) }}</div></td>
+      {% for k in level_keys %}<td class="c">{% if perms[key] == loop.index0 %}<span class="lvl lvl-{{ k }}">●</span>{% endif %}</td>{% endfor %}</tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}{{ _("Switch models") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1>{% if can('models','edit') %}<a class="btn primary" href="{{ url_for('model_edit') }}">+ {{ _("New model") }}</a>{% endif %}</div>
+{% include "_settings_nav.html" %}
+<div class="card flush scroll-x">
+<table class="tbl sortable">
+  <thead><tr><th>{{ _("Model") }}</th><th>{{ _("Vendor") }}</th><th>{{ _("Layer") }}</th><th>{{ _("PoE") }}</th><th>{{ _("SFP ports") }}</th><th>{{ _("Default ports") }}</th><th data-num>{{ _("Switches") }}</th><th></th></tr></thead>
+  <tbody>
+  {% for m in models %}
+  <tr>
+    <td><b>{{ m.name }}</b>{% if m.notes %}<div class="sub">{{ m.notes }}</div>{% endif %}</td>
+    <td>{{ m.vendor }}</td>
+    <td><span class="layer l-{{ m.layer|lower }}" title="{{ _(layers.get(m.layer, '')) }}">{{ m.layer }}</span></td>
+    <td>{{ _("Yes") if m.poe else _("No") }}</td>
+    <td>{{ (m.sfp_count ~ ' SFP') if m.sfp and m.sfp_count else (_("Yes") if m.sfp else _("No")) }}</td>
+    <td>{{ m.port_count or '' }}</td>
+    <td data-v="{{ m.used }}">{{ m.used }}</td>
+    <td class="r">{% if can('models','edit') %}<a class="btn sm" href="{{ url_for('model_edit', mid=m.id) }}">{{ _("Edit") }}</a>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="empty">{{ _("No models yet.") }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">{{ _("Models used by switches are added here automatically (e.g. after an import) with Layer 2 as default — open them to set the right layer, PoE and SFP details.") }}</p>
+{% endblock %}

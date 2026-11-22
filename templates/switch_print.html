@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="{{ lang }}"><head><meta charset="utf-8"><title>{{ sw.name }} - {{ _("Verification sheet") }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { font: 11px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+  .bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .bar button, .bar a { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 6px; border: 1px solid #0f766e; background: #0f766e; color: #fff; cursor: pointer; text-decoration: none; }
+  .bar a { background: #fff; color: #0f766e; }
+  h1 { font-size: 20px; margin: 0; } h1 small { font-size: 13px; color: #64748b; font-weight: 500; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 6px; margin-bottom: 8px; }
+  .meta { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 18px; margin: 6px 0 10px; }
+  .meta b { color: #475569; font-weight: 600; margin-right: 4px; }
+  .panel { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0 10px; padding: 8px; background: #1e293b; border-radius: 6px; width: max-content; max-width: 100%; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-rows: repeat(2, 26px); grid-auto-flow: column; gap: 3px; }
+  .p { width: 26px; height: 26px; border-radius: 3px; border: 2px solid var(--c); background: #334155; color: #fff; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .p.off { background: #7f1d1d; border-color: #ef4444; opacity: .7; }
+  .p.s2s { background: #dc2626; border-color: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #94a3b8; padding: 3px 5px; text-align: left; vertical-align: top; }
+  th { background: #e2e8f0; font-size: 10px; text-transform: uppercase; letter-spacing: .02em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tr.off td { color: #94a3b8; background: #f8fafc; }
+  tr.s2s td:first-child { box-shadow: inset 4px 0 0 #dc2626; }
+  td.chk { width: 34px; } td.rem { width: 15%; }
+  .box { display: inline-block; width: 13px; height: 13px; border: 1.5px solid #0f172a; border-radius: 2px; }
+  .tag { display: inline-block; padding: 0 5px; border-radius: 3px; font-weight: 700; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .red { background: #dc2626; color: #fff; }
+  .sub { color: #475569; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 18px; page-break-inside: avoid; }
+  .sign div { border-top: 1px solid #0f172a; padding-top: 4px; color: #475569; height: 48px; }
+  .note { color: #64748b; font-size: 10px; margin-top: 6px; }
+  thead { display: table-header-group; } tr { page-break-inside: avoid; }
+  @media print { .bar { display: none; } body { padding: 0; } }
+</style></head>
+<body>
+<div class="bar"><button onclick="window.print()">🖨 {{ _("Print") }}</button><a href="{{ url_for('switch_view', sid=sw.id) }}">{{ _("Back to the switch") }}</a></div>
+<div class="head">
+  <div><h1>{{ sw.name }} {% if sw.designation %}<small>— {{ sw.designation }}</small>{% endif %}</h1>
+    <div>{{ _("Verification sheet") }}{% if ticket %} · {{ _("Maintenance ticket #%(n)s", n=ticket) }}{% endif %}{% if not all_ports %} · {{ _("Filtered: %(n)s of %(t)s ports", n=ports|length, t=total) }}{% endif %}</div></div>
+  <div style="text-align:right">{{ _("Printed on %(d)s by %(u)s", d=printed, u=display_name(me)) }}<br>SwitchDoc</div>
+</div>
+<div class="meta">
+  <span><b>{{ _("IP address") }}</b>{{ sw.ip or '—' }}</span><span><b>{{ _("Model") }}</b>{{ sw.model or '—' }} · {{ sw.layer or 'L3' }}{% if sw.poe %} · PoE{% endif %}</span>
+  <span><b>{{ _("Serial number") }}</b>{{ sw.serial or '—' }}</span><span><b>{{ _("Groups") }}</b>{{ groups|join(', ') or '—' }}</span>
+  <span><b>{{ _("Area") }}</b>{{ sw.area or '—' }}</span><span><b>{{ _("Location") }}</b>{{ sw.location or '—' }}</span>
+  <span><b>{{ _("Rack identifier") }}</b>{{ sw.rack or '—' }}</span><span><b>{{ _("In service since") }}</b>{{ sw.in_service or '—' }}</span>
+</div>
+{% if all_ports and ports %}
+<div class="panel">
+  {% set copper = ports[:ports|length - sfp_n] %}
+  <div class="grid">{% for p in copper %}<div class="p {{ 'off' if p.status == 'disabled' }} {{ 's2s' if p.remote_switch }}" style="--c: {{ type_colors.get(p.ptype, '#64748b') }}">{{ p.idx }}</div>{% endfor %}</div>
+  {% if sfp_n %}<div class="grid">{% for p in ports[ports|length - sfp_n:] %}<div class="p {{ 'off' if p.status == 'disabled' }} {{ 's2s' if p.remote_switch }}" style="--c: {{ type_colors.get(p.ptype, '#64748b') }}">{{ p.idx }}</div>{% endfor %}</div>{% endif %}
+</div>
+{% endif %}
+<table>
+  <thead><tr><th>{{ _("Port") }}</th><th>{{ _("Status") }}</th><th>{{ _("Type") }}</th><th>{{ _("Speed") }}</th><th>{{ _("VLAN") }}</th>
+    <th>{{ _("Patch panel port") }}</th><th>{{ _("Patch panel label") }}</th><th>{{ _("Equipment type") }}</th><th>{{ _("Connected equipment") }}</th>
+    <th>{{ _("User") }}</th><th>{{ _("Remote port") }}</th><th>{{ _("Description") }}</th><th>{{ _("OK") }}</th><th>{{ _("Remarks") }}</th></tr></thead>
+  <tbody>
+  {% for p in ports %}
+  <tr class="{{ 'off' if p.status == 'disabled' }} {{ 's2s' if p.remote_switch }}">
+    <td><b>{{ p.name }}</b></td><td>{{ _("Active") if p.status == 'active' else _("Disabled") }}</td>
+    <td>{% if p.remote_switch %}<span class="tag red">{{ p.ptype }}</span>{% else %}{{ p.ptype }}{% endif %}</td>
+    <td>{% if p.speed == 'fiber' %}<span class="tag red">{{ _(speeds.get(p.speed)) }}</span>{% else %}{{ _(speeds.get(p.speed or 'gigabit', '')) }}{% endif %}</td>
+    <td>{{ p.vlan }}</td><td>{{ p.patch_port }}</td><td>{{ p.patch_label }}</td><td>{{ p.eq_type }}</td>
+    <td>{{ p.equipment }}{% if p.equipment2 %}<div class="sub">↳ {{ p.equipment2 }}{% if p.eq2_type %} ({{ p.eq2_type }}){% endif %}</div>{% endif %}</td>
+    <td>{{ p.user }}</td><td>{{ p.remote_port }}</td><td>{{ p.description }}</td>
+    <td class="chk"><span class="box"></span></td><td class="rem"></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="note">{{ _("Tick OK when what you see on site matches the line, otherwise write the difference in Remarks.") }}</p>
+<div class="sign"><div>{{ _("Verified by") }}</div><div>{{ _("Date") }}</div><div>{{ _("Signature") }}</div></div>
+<script>if (new URLSearchParams(location.search).get('auto') === '1') window.addEventListener('load', () => window.print());</script>
+</body></html>

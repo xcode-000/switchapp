@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block title %}{{ _("Maintenance") }}{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div><h1>{{ _("Maintenance") }}</h1>
+    <p class="muted small nomargin">{{ _("Planned maintenance and documentation checks of switches or racks. Changes made during a ticket are held until a supervisor validates it.") }}</p></div>
+  {% if can('maintenance', 'modify') %}<a class="btn primary" href="{{ url_for('ticket_edit') }}">+ {{ _("New ticket") }}</a>{% endif %}
+</div>
+<form method="get" class="card tk-filters" id="tkSearch">
+  <div class="seg">
+    <a href="{{ url_for('maintenance', mine=1 if mine else None) }}" class="{{ 'on' if status == 'active' and not searching }}">{{ _("Not closed") }} <b>{{ counts.open + counts.in_progress + counts.pending_validation }}</b></a>
+    {% for k in ['open', 'in_progress', 'pending_validation'] %}<a href="{{ url_for('maintenance', status=k, mine=1 if mine else None) }}" class="{{ 'on' if status == k }}">{{ _(statuses[k]) }} <b>{{ counts[k] }}</b></a>{% endfor %}
+  </div>
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ _('Search: ticket #, title, switch, technician…') }}">
+  <select name="status">
+    <option value="active" {{ 'selected' if status == 'active' }}>{{ _("Not closed") }}</option>
+    <option value="closed" {{ 'selected' if status == 'closed' }}>{{ _("Closed (validated or cancelled)") }}</option>
+    {% for k, l in statuses.items() %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ _(l) }}</option>{% endfor %}
+    <option value="all" {{ 'selected' if status == 'all' }}>{{ _("All") }}</option>
+  </select>
+  <label class="inline-num">{{ _("Planned from") }} <input type="date" name="from" value="{{ d_from }}"></label>
+  <label class="inline-num">{{ _("to") }} <input type="date" name="to" value="{{ d_to }}"></label>
+  <label class="check"><input type="checkbox" name="mine" value="1" {{ 'checked' if mine }}> {{ _("Only my tickets") }}</label>
+  <label class="check"><input type="checkbox" name="archived" value="1" {{ 'checked' if archived }}> {{ _("Archived") }}</label>
+  <button class="btn sm primary">{{ _("Search") }}</button>
+  {% if searching %}<a class="btn sm ghost" href="{{ url_for('maintenance') }}">{{ _("Clear") }}</a>{% endif %}
+</form>
+<p class="muted small">{{ _("By default only the tickets that are not closed are listed. Use the search (status “Closed”) to find validated or cancelled tickets.") }}</p>
+<div class="tk-list">
+{% for t in tickets %}
+  {% set pg = t.progress %}{% set pct = (100 * pg.done / pg.total)|round|int if pg.total else 0 %}
+  <a class="card tk tk-{{ t.status }}{{ ' mine' if t.mine }}" href="{{ url_for('ticket_view', tid=t.id) }}">
+    <div class="tk-head">
+      <span class="tk-id">#{{ t.id }}</span>
+      <b class="tk-title">{{ t.title }}</b>
+      <span class="tag st-{{ t.status }}">{{ _(statuses[t.status]) }}</span>
+      {% if t.late %}<span class="tag warn">{{ _("late") }}</span>{% endif %}
+      {% if t.mine %}<span class="tag inuse">{{ _("assigned to you") }}</span>{% endif %}
+      {% if t.archived %}<span class="tag off">{{ _("archived") }}</span>{% endif %}
+      {% if t.closed_at %}<span class="muted small">{{ _("closed on %(d)s", d=t.closed_at) }}</span>{% endif %}
+    </div>
+    <div class="tk-meta">
+      <span>{{ _(kinds.get(t.kind, t.kind)) }}</span>
+      <span>📅 {{ t.planned_start }} → {{ t.planned_end }}</span>
+      <span>👤 {{ t.assignees|join(', ') or '—' }}</span>
+      <span class="muted">{{ t.switches[:6]|join(', ') }}{% if t.switches|length > 6 %} +{{ t.switches|length - 6 }}{% endif %}</span>
+    </div>
+    <div class="tk-progress"><div class="bar"><i style="width: {{ pct }}%"></i></div>
+      <span>{{ _("%(d)s / %(t)s switches verified", d=pg.done, t=pg.total) }}{% if pg.changes %} · {{ _("%(n)s changes waiting", n=pg.changes) }}{% endif %}</span></div>
+  </a>
+{% else %}
+  <div class="card empty">{{ _("No ticket here.") }}</div>
+{% endfor %}
+</div>
+{% endblock %}

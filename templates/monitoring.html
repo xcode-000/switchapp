@@ -1,0 +1,85 @@
+{% extends "base.html" %}{% block title %}{{ _("Switch status") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}{% if company %} <span class="muted small">· {{ company.name }}</span>{% endif %}</h1></div>
+{% include "_settings_nav.html" %}
+{% set ed = can('switches', 'modify') %}
+{% set on = cfg.mon_enabled == '1' %}
+<div class="card">
+  <div class="card-head"><h2>{{ _("Switch status") }} <span class="tag {{ 'approved' if on else 'off' }}">{{ _("On") if on else _("Off") }}</span></h2>
+    {% if ed and on %}<form method="post" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="btn" name="action" value="check" id="monCheck">{{ _("Check now") }}</button></form>{% endif %}</div>
+  <p class="muted">{{ _("SwitchDoc pings every active switch of this company in the background and shows whether it is online, slow or offline on the switch list, the switch page and the topology. Nothing is changed on the switches, and no maintenance ticket is ever created: the status is information only.") }}</p>
+  {% if on %}
+  <div class="st-tiles tiles">
+    {% for k in ['online', 'slow', 'offline', 'maint', 'unknown'] %}
+    <a class="tile st-{{ k }}" href="{{ url_for('dashboard', st=k) }}"><b>{{ counts.get(k, 0) }}</b><span>{{ _(mon_labels[k]) }}</span></a>
+    {% endfor %}
+  </div>
+  <p class="muted small">{{ _("%(n)s switches checked · probe: %(m)s · last round: %(t)s", n=total - counts.get('off', 0), m=method, t=cfg.mon_last_round or '—') }}{% if running %} · <b>{{ _("checking now…") }}</b>{% endif %}</p>
+  {% endif %}
+  <form method="post" class="mon-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="check big"><input type="checkbox" name="mon_enabled" value="1" id="monOn" {{ 'checked' if on }} {{ 'disabled' if not ed }}> {{ _("Check the status of the switches") }}</label>
+    <div class="grid2">
+      <label>{{ _("Check every") }} <span class="inline-num"><input type="number" name="mon_interval" min="30" max="3600" value="{{ cfg.mon_interval }}" {{ 'disabled' if not ed }}> {{ _("seconds") }}</span></label>
+      <label>{{ _("Offline after") }} <span class="inline-num"><input type="number" name="mon_fails" min="1" max="20" value="{{ cfg.mon_fails }}" {{ 'disabled' if not ed }}> {{ _("failed checks in a row") }}</span></label>
+      <label>{{ _("Slow when the answer takes more than") }} <span class="inline-num"><input type="number" name="mon_slow_ms" min="1" value="{{ cfg.mon_slow_ms }}" {{ 'disabled' if not ed }}> ms</span></label>
+      <label>{{ _("… or when packet loss reaches") }} <span class="inline-num"><input type="number" name="mon_slow_loss" min="1" max="100" value="{{ cfg.mon_slow_loss }}" {{ 'disabled' if not ed }}> %</span></label>
+      <label>{{ _("TCP port to try when ping is blocked (optional)") }} <input type="text" name="mon_tcp_port" value="{{ cfg.mon_tcp_port }}" placeholder="22" inputmode="numeric" {{ 'disabled' if not ed }}></label>
+      <label class="check"><input type="checkbox" name="mon_snmp" value="1" {{ 'checked' if cfg.mon_snmp == '1' }} {{ 'disabled' if not ed }}> {{ _("Read the uptime by SNMP (detects reboots; uses the SNMP credential of the switch)") }}</label>
+    </div>
+    <h3>{{ _("Email alerts (optional)") }}</h3>
+    <p class="muted small">{{ _("One message when a switch goes offline and one when it comes back. Leave empty for no email.") }}</p>
+    <div class="grid2">
+      <label>{{ _("Recipients (separated by commas)") }} <input type="text" name="mon_email" value="{{ cfg.mon_email }}" placeholder="it@example.com" class="w-wide" {{ 'disabled' if not ed }}></label>
+      <div>
+        <label class="check"><input type="checkbox" name="mon_email_slow" value="1" {{ 'checked' if cfg.mon_email_slow == '1' }} {{ 'disabled' if not ed }}> {{ _("Also send an email when a switch becomes slow") }}</label>
+        <label class="check"><input type="checkbox" name="mon_quiet_maint" value="1" {{ 'checked' if cfg.mon_quiet_maint == '1' }} {{ 'disabled' if not ed }}> {{ _("No email for switches under an open maintenance ticket") }}</label>
+      </div>
+    </div>
+    {% if ed %}<p><button class="btn primary" name="action" value="save" id="monSave">{{ _("Save") }}</button></p>{% endif %}
+  </form>
+  <p class="muted small">{{ _("The server running SwitchDoc must be allowed to ping the switches (ICMP) and, for the uptime, to reach UDP port 161.") }}</p>
+</div>
+<div class="card" id="excluded">
+  <h2>{{ _("Switches not checked") }} <span class="count">{{ excluded|length }}</span></h2>
+  <p class="muted">{{ _("A switch in this list is never pinged: it shows Not monitored, is never counted as offline and sends no e-mail (e.g. a lab or spare switch, or one that blocks ping). Switches without an IP address and Layer 1 switches are never checked. You can also untick “Check the status of this switch” on the switch form.") }}</p>
+  {% if excluded %}
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <table class="tbl compact"><thead><tr>{% if ed %}<th class="cb"></th>{% endif %}<th>{{ _("Switch") }}</th><th>{{ _("IP address") }}</th><th>{{ _("Area") }}</th></tr></thead><tbody>
+    {% for r in excluded %}<tr>{% if ed %}<td class="cb"><input type="checkbox" name="sid" value="{{ r.id }}"></td>{% endif %}
+      <td><a class="swname" href="{{ url_for('switch_view', sid=r.id) }}">{{ r.name }}</a></td><td><code>{{ r.ip }}</code></td><td>{{ r.area }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% if ed %}<p><button class="btn" name="action" value="include" id="monInclude">{{ _("Check the selected switches again") }}</button></p>{% endif %}
+  </form>
+  {% else %}<p class="empty">{{ _("Every switch with an IP address is checked.") }}</p>{% endif %}
+  {% if ed and checkable %}
+  <form method="post" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>{{ _("Stop checking") }} <select name="sid" id="monExSel" required><option value="">{{ _("Choose a switch…") }}</option>
+      {% for r in checkable %}<option value="{{ r.id }}">{{ r.name }} · {{ r.ip }}</option>{% endfor %}</select></label>
+    <button class="btn" name="action" value="exclude" id="monExclude">{{ _("Do not check this switch") }}</button>
+  </form>{% endif %}
+</div>
+{% if smtp is not none %}
+<div class="card" id="smtp">
+  <h2>{{ _("Mail server") }} <span class="muted small">· {{ _("all companies") }}</span></h2>
+  <p class="muted">{{ _("Used to send the status alerts. Only administrators see this section.") }}</p>
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <div class="grid2">
+      <label>{{ _("SMTP server") }} <input type="text" name="smtp_host" value="{{ smtp.smtp_host }}" placeholder="mail.example.com"></label>
+      <label>{{ _("Port") }} <input type="text" name="smtp_port" value="{{ smtp.smtp_port }}" placeholder="587" inputmode="numeric"></label>
+      <label>{{ _("Security") }} <select name="smtp_security">
+        {% for v, l in [('starttls', 'STARTTLS'), ('ssl', 'SSL/TLS'), ('none', _('None'))] %}<option value="{{ v }}" {{ 'selected' if (smtp.smtp_security or 'starttls') == v }}>{{ l }}</option>{% endfor %}</select></label>
+      <label>{{ _("Sender address") }} <input type="text" name="smtp_from" value="{{ smtp.smtp_from }}" placeholder="switchdoc@example.com"></label>
+      <label>{{ _("User name (optional)") }} <input type="text" name="smtp_user" value="{{ smtp.smtp_user }}" autocomplete="off"></label>
+      <label>{{ _("Password") }} <input type="password" name="smtp_pass" autocomplete="new-password" placeholder="{{ _('unchanged') if smtp.smtp_pass else '' }}">
+        {% if smtp.smtp_pass %}<span class="check small"><input type="checkbox" name="smtp_pass_clear" value="1"> {{ _("Remove the saved password") }}</span>{% endif %}</label>
+    </div>
+    <p><button class="btn primary" name="action" value="smtp">{{ _("Save") }}</button></p>
+  </form>
+  <form method="post" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>{{ _("Send a test message to") }} <input type="text" name="test_to" value="{{ cfg.mon_email }}" class="w-wide"></label>
+    <button class="btn" name="action" value="test_mail">{{ _("Send test") }}</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

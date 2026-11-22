@@ -1,0 +1,146 @@
+{% extends "base.html" %}{% block title %}{{ _("Assets") }}{% endblock %}
+{% block content %}
+{% set ed = can('assets', 'edit') %}{% set md = can('assets', 'modify') %}
+{% set here = url_for('assets_page', type=cur.id if cur else None, q=q or None, state=state or None) %}
+{% set st_label = dict(states) %}
+{% macro icon_picker(current, fid) -%}
+<div class="icon-pick">
+  <span class="ip-label">{{ _("Logo") }}</span>
+  <details class="icon-menu"><summary><img src="{{ url_for('static', filename='icons/' ~ (current or 'other') ~ '.svg') }}" alt="" class="ip-cur"> <span>{{ _(icons.get(current or 'other', '')) }}</span> ▾</summary>
+    <div class="icon-grid">{% for k, label in icons.items() %}<label title="{{ _(label) }}"><input type="radio" name="icon" value="{{ k }}" {{ 'checked' if k == (current or 'other') }} {% if fid %}form="{{ fid }}"{% endif %}><img src="{{ url_for('static', filename='icons/' ~ k ~ '.svg') }}" alt=""><span>{{ _(label) }}</span></label>{% endfor %}</div>
+  </details>
+</div>
+{%- endmacro %}
+<div class="pagehead">
+  <div><h1>{{ _("Assets") }}</h1>
+    <p class="muted small nomargin">{{ _("Each port says what is plugged into it: an Equipment type, then an asset of that type. Asset names are unique. Switches are assets too - they are managed in Settings › Switches.") }}</p></div>
+  <form class="search" method="get"><input type="search" name="q" value="{{ q }}" placeholder="{{ _('Search an asset (name, IP, MAC, serial…)') }}"></form>
+</div>
+
+<div class="tiles asset-tiles">
+  <a class="tile{{ ' on' if not state }}" href="{{ url_for('assets_page', type=cur.id if cur and not cur.system else None) }}"><b>{{ totals.n or 0 }}</b><span>{{ _("assets in total") }}</span></a>
+  <a class="tile inuse{{ ' on' if state == 'in_use' }}" href="{{ url_for('assets_page', state='in_use') }}"><b>{{ totals.used or 0 }}</b><span>{{ _("In use") }}</span></a>
+  <a class="tile ok{{ ' on' if state == 'free' }}" href="{{ url_for('assets_page', state='free') }}"><b>{{ (totals.stock or 0) + (totals.defective or 0) }}</b><span>{{ _("Free") }} · {{ totals.stock or 0 }} {{ _("In stock")|lower }}</span></a>
+  <a class="tile bad{{ ' on' if state == 'defective' }}" href="{{ url_for('assets_page', state='defective') }}"><b>{{ totals.defective or 0 }}</b><span>{{ _("Defective") }}</span></a>
+</div>
+
+<div class="asset-types">
+  <div>
+    <div class="card flush type-list">
+      {% for t in types %}
+      <a href="{{ url_for('assets_page', type=t.id) }}" class="{{ 'on' if cur and cur.id == t.id }}">
+        <img class="ticon" src="{{ url_for('static', filename='icons/' ~ (t.icon or 'other') ~ '.svg') }}" alt="">{{ t.name }}{% if t.system %} <span class="sys">{{ _("built-in") }}</span>{% endif %}
+        <span class="n" title="{{ _('In use') }} / {{ _('assets in total') }}">{% if not t.system %}{{ t.used or 0 }} / {{ t.n }}{% endif %}</span></a>
+      {% endfor %}
+    </div>
+    {% if ed %}
+    <details class="card" {{ 'open' if not types|rejectattr('system')|list }}>
+      <summary><b>+ {{ _("New equipment type") }}</b></summary>
+      <form method="post" action="{{ url_for('asset_type_save') }}" class="stack">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <label>{{ _("Name") }}<input name="name" required placeholder="{{ _('e.g. Barcode printer') }}"></label>
+        <label>{{ _("Shape in the topology") }}<select name="kind">{% for k, l in kinds %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+        <label>{{ _("Colour") }}<input type="color" name="color" value="#2563eb"></label>
+        {{ icon_picker('pc', '') }}
+        <label class="check"><input type="checkbox" name="multi" value="1"> {{ _("Can be connected to several ports") }}</label>
+        <button class="btn primary">{{ _("Add") }}</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+
+  <div>
+  {% if q or (state and not cur) %}
+    <h2 class="section nomargin">{% if q %}{{ _("Search results for “%(q)s”", q=q) }}{% else %}{{ _(st_label[state]) }}{% endif %} <span class="muted small">({{ rows|length }})</span> <a class="btn sm ghost" href="{{ url_for('assets_page') }}">{{ _("Clear") }}</a></h2>
+  {% elif cur %}
+    <div class="card">
+      <div class="card-head"><h2><img class="ticon lg" src="{{ url_for('static', filename='icons/' ~ (cur.icon or 'other') ~ '.svg') }}" alt="">{{ cur.name }}</h2>
+        {% if not cur.system and md and not cur.n and not cur.ports %}<form method="post" action="{{ url_for('asset_type_delete', tid=cur.id) }}" class="inline" data-confirm="{{ _('Delete %(name)s?', name=cur.name) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm danger">{{ _("Delete this type") }}</button></form>{% endif %}</div>
+      {% if cur.system %}
+        {% if ed %}<form method="post" action="{{ url_for('asset_type_save') }}" class="asset-form"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ cur.id }}"><input type="hidden" name="name" value="{{ cur.name }}"><input type="hidden" name="color" value="{{ cur.color }}"><input type="hidden" name="sort" value="{{ cur.sort }}">{{ icon_picker(cur.icon, '') }}<button class="btn sm">{{ _("Save") }}</button></form>{% endif %}
+        <p class="muted">{{ _("Built-in type: its assets are your switches. Choosing it on a port creates a switch-to-switch link - the Remote port becomes a drop-down of the other switch's ports and both switches are kept in sync.") }}</p>
+      {% elif ed %}
+      <form method="post" action="{{ url_for('asset_type_save') }}" class="asset-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ cur.id }}">
+        <label>{{ _("Name") }}<input name="name" value="{{ cur.name }}" required></label>
+        <label>{{ _("Shape in the topology") }}<select name="kind">{% for k, l in kinds %}<option value="{{ k }}" {{ 'selected' if cur.kind == k }}>{{ l }}</option>{% endfor %}</select></label>
+        <label>{{ _("Colour") }}<input type="color" name="color" value="{{ cur.color }}"></label>
+        <label>{{ _("Order") }}<input type="number" name="sort" value="{{ cur.sort }}" style="width:70px; min-width:0"></label>
+        <label class="grow">{{ _("Description") }}<input name="description" value="{{ cur.description }}"></label>
+        {{ icon_picker(cur.icon, '') }}
+        <label class="check" title="{{ _('e.g. a server or firewall with several cables. When off, an asset already connected to a port is greyed out in the port drop-down.') }}"><input type="checkbox" name="multi" value="1" {{ 'checked' if cur.multi }}> {{ _("Can be connected to several ports") }}</label>
+        <button class="btn">{{ _("Save") }}</button>
+      </form>
+      {% else %}<p class="muted">{{ _("Shape in the topology") }}: {{ kind_labels.get(cur.kind, cur.kind) }}</p>{% endif %}
+      {% if not cur.system %}<p class="muted small nomargin">{{ _("%(u)s in use · %(f)s free (%(s)s in stock, %(d)s defective) · %(n)s in total", u=cur.used or 0, f=cur.n - (cur.used or 0), s=cur.n - (cur.used or 0) - (cur.defective or 0), d=cur.defective or 0, n=cur.n) }}</p>{% endif %}
+    </div>
+  {% endif %}
+
+  {% if cur and cur.system and not q %}
+    <div class="card flush scroll-x">
+      <table class="tbl compact">
+        <thead><tr><th>{{ _("Switch") }}</th><th>{{ _("IP address") }}</th><th>{{ _("Model") }}</th><th>{{ _("Location") }}</th><th>{{ _("Status") }}</th></tr></thead>
+        {% for s in switch_rows %}
+        <tr><td><a class="swname" href="{{ url_for('switch_view', sid=s.id) }}">{{ s.name }}</a></td><td><code>{{ s.ip }}</code></td><td>{{ s.model }}</td><td>{{ s.location }}</td><td>{{ _("Active") if s.status == 'active' else _("Disabled") }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% if can('switches') %}<p><a class="btn" href="{{ url_for('settings_switches') }}">{{ _("Manage switches in Settings › Switches") }}</a></p>{% endif %}
+  {% else %}
+    {% if cur and ed %}
+    <details class="card" {{ 'open' if not rows }}>
+      <summary><b>+ {{ _("Add %(type)s", type=cur.name) }}</b></summary>
+      <form method="post" action="{{ url_for('asset_save') }}" class="asset-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="type_id" value="{{ cur.id }}"><input type="hidden" name="next" value="{{ here }}">
+        <label>{{ _("Name(s) - one per line to add several") }}<textarea name="names" rows="3" required placeholder="PC0107&#10;PC0108"></textarea></label>
+        <label>{{ _("IP address") }}<input name="ip"></label>
+        <label>{{ _("MAC address") }}<input name="mac"></label>
+        <label>{{ _("Serial number") }}<input name="serial"></label>
+        <label>{{ _("Location") }}<input name="location"></label>
+        <label class="grow">{{ _("Notes") }}<input name="notes"></label>
+        <label>{{ _("Status") }}<select name="state"><option value="stock">{{ _("In stock") }}</option><option value="defective">{{ _("Defective") }}</option></select></label>
+        <button class="btn primary">{{ _("Add") }}</button>
+      </form>
+    </details>
+    {% endif %}
+    <div class="card flush scroll-x">
+      <table class="tbl compact sortable" id="assetTbl">
+        <thead><tr><th>{{ _("Status") }}</th><th>{{ _("Name") }}</th>{% if q or not cur %}<th>{{ _("Equipment type") }}</th>{% endif %}<th>{{ _("IP address") }}</th><th>{{ _("MAC address") }}</th><th>{{ _("Serial number") }}</th><th>{{ _("Location") }}</th><th>{{ _("Notes") }}</th><th>{{ _("Connected to") }}</th><th data-nosort></th></tr></thead>
+        <tbody>
+        {% for a in rows %}{% set f = 'a' ~ a.id %}{% set used = usage.get(a.name|lower, []) %}
+        <tr class="st-{{ a.st }}">
+          <td class="nowrap">{% if a.st == 'in_use' %}<span class="tag inuse" title="{{ _('Set automatically: the asset is connected to a port') }}">{{ _("In use") }}</span>
+            {% elif ed %}<select form="{{ f }}" name="state" class="state-sel st-{{ a.st }}"><option value="stock" {{ 'selected' if a.st == 'stock' }}>{{ _("In stock") }}</option><option value="defective" {{ 'selected' if a.st == 'defective' }}>{{ _("Defective") }}</option></select>
+            {% else %}<span class="tag {{ 'off' if a.st == 'defective' else 'approved' }}">{{ _(st_label[a.st]) }}</span>{% endif %}</td>
+          {% if ed %}
+          <td><input form="{{ f }}" name="name" value="{{ a.name }}" required></td>
+          {% if q or not cur %}<td><select form="{{ f }}" name="type_id">{% for t in types if not t.system %}<option value="{{ t.id }}" {{ 'selected' if t.id == a.type_id }}>{{ t.name }}</option>{% endfor %}</select></td>{% endif %}
+          <td><input form="{{ f }}" name="ip" value="{{ a.ip }}" size="12"></td>
+          <td><input form="{{ f }}" name="mac" value="{{ a.mac }}" size="14"></td>
+          <td><input form="{{ f }}" name="serial" value="{{ a.serial }}" size="10"></td>
+          <td><input form="{{ f }}" name="location" value="{{ a.location }}" size="10"></td>
+          <td><input form="{{ f }}" name="notes" value="{{ a.notes }}"></td>
+          {% else %}
+          <td><b>{{ a.name }}</b></td>{% if q or not cur %}<td><i class="tsw" style="background: {{ a.color }}"></i>{{ a.type_name }}</td>{% endif %}
+          <td><code>{{ a.ip }}</code></td><td><code>{{ a.mac }}</code></td><td>{{ a.serial }}</td><td>{{ a.location }}</td><td class="small">{{ a.notes }}</td>
+          {% endif %}
+          <td class="uses">{% for sid, swn, pid, pn, behind in used %}<a href="{{ url_for('switch_view', sid=sid) }}#port-{{ pid }}">{{ swn }} {{ pn }}</a>{% if behind %} <span class="muted" title="{{ _('Device behind (e.g. PC behind a phone)') }}">↳</span>{% endif %}{{ ', ' if not loop.last }}{% else %}<span class="muted">—</span>{% endfor %}</td>
+          <td class="r nowrap">
+            {% if ed %}<form method="post" action="{{ url_for('asset_save') }}" id="{{ f }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ a.id }}">{% if a.st == 'in_use' %}<input type="hidden" name="state" value="{{ a.state or 'stock' }}">{% endif %}{% if not (q or not cur) %}<input type="hidden" name="type_id" value="{{ a.type_id }}">{% endif %}<input type="hidden" name="next" value="{{ here }}"><button class="btn sm">{{ _("Save") }}</button></form>{% endif %}
+            {% if can('ports', 'edit') %}<a class="btn sm ghost" href="{{ url_for('asset_move', aid=a.id, next=here) }}" title="{{ _('Move to another port') }}">⇄</a>{% endif %}
+            {% if md %}<form method="post" action="{{ url_for('asset_delete', aid=a.id) }}" class="inline" data-confirm="{{ _('Delete %(name)s?', name=a.name) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ here }}"><button class="btn sm danger" title="{{ _('Delete') }}" {{ 'disabled' if used }}>✕</button></form>{% endif %}
+          </td>
+        </tr>
+        {% else %}<tr><td colspan="10" class="empty">{{ _("Nothing yet.") }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if cur and md and rows %}
+    <form method="post" action="{{ url_for('assets_delete_unused') }}" class="inline" data-confirm="{{ _('Delete every %(type)s that is not connected to a port?', type=cur.name) }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="type_id" value="{{ cur.id }}">
+      <button class="btn sm ghost">{{ _("Delete the unused %(type)s assets", type=cur.name) }}</button></form>
+    {% endif %}
+  {% endif %}
+  </div>
+</div>
+{% endblock %}

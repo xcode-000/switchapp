@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}{{ prof.name if prof else _("New authorisation profile") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Profile %(name)s", name=prof.name) if prof else _("New authorisation profile") }}</h1><a class="btn ghost" href="{{ url_for('profiles') }}">{{ _("Cancel") }}</a></div>
+{% include "_settings_nav.html" %}
+<form method="post">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="card form-grid">
+    <label>{{ _("Profile name") }} *<input name="name" value="{{ prof.name if prof }}" required></label>
+    <label>{{ _("Description") }}<input name="description" value="{{ prof.description if prof }}"></label>
+  </div>
+  <div class="card flush scroll-x">
+  <table class="tbl perm-matrix edit">
+    <thead><tr><th>{{ _("Menu") }}</th>{% for v, l in levels %}<th class="c"><button type="button" class="linkish" data-col="{{ v }}" title="{{ _('Set every menu to %(l)s', l=_(l)) }}">{{ _(l) }}</button></th>{% endfor %}</tr></thead>
+    {% for key, label, help in menus %}
+    <tr><td><b>{{ _(label) }}</b><div class="sub">{{ _(help) }}</div></td>
+      {% for v, l in levels %}<td class="c"><label class="radio lvl-{{ v }}"><input type="radio" name="perm_{{ key }}" value="{{ v }}" {{ 'checked' if perms.get(key, 'none') == v }} aria-label="{{ _(label) }}: {{ _(l) }}"><span></span></label></td>{% endfor %}</tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% if users %}<p class="muted small">{{ _("Used by:") }} {% for u in users %}{{ display_name(u) }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  <p><button class="btn primary">{{ _("Save profile") }}</button></p>
+</form>
+{% if prof and can('profiles','modify') %}
+<form method="post" action="{{ url_for('profile_delete', aid=prof.id) }}" class="danger-zone" data-confirm="{{ _('Delete profile %(name)s?', name=prof.name) }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">{{ _("Delete profile") }}</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>
+document.querySelectorAll('[data-col]').forEach(b => b.addEventListener('click', () =>
+  document.querySelectorAll(`input[type=radio][value="${b.dataset.col}"]`).forEach(r => r.checked = true)));
+</script>{% endblock %}

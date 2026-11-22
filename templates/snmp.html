@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block title %}SNMP{% endblock %}{% block mainclass %}wide{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div><h1>{{ _("SNMP - live view") }}</h1>
+    <p class="muted small nomargin">{{ _("Reads the switch with its read-only community (SNMP v2c or v1). Nothing is changed on the switch and nothing retrieved is stored - only the fact that you queried it is written to the audit log.") }}</p></div>
+</div>
+<form class="card snmp-form" id="snmpForm" autocomplete="off">
+  <label>{{ _("Switch") }}
+    <select id="sSwitch" required>
+      <option value="">{{ _("— choose —") }}</option>
+      {% for s in sws %}<option value="{{ s.id }}" data-ip="{{ s.ip }}" data-comm="{{ s.comm }}" {{ 'selected' if sel == s.id }}>{{ s.name }}{% if s.ip %} · {{ s.ip }}{% endif %}{% if s.area %} · {{ s.area }}{% endif %}</option>{% endfor %}
+    </select></label>
+  <label>{{ _("Address") }}<input id="sHost" placeholder="10.99.99.1" size="16" title="{{ _('IP address of the switch (optionally :port)') }}"></label>
+  <label>{{ _("Community (read-only)") }}<select id="sCommSel">
+      <option value="">{{ _("From the switch's credential profile") }}</option>
+      {% if comms %}<optgroup label="{{ _('Credentials') }}">{% for c in comms %}<option value="{{ c.id }}">{{ c.profile }} · {{ c.label }}</option>{% endfor %}</optgroup>{% endif %}
+      <option value="other">{{ _("Other - type it…") }}</option>
+    </select></label>
+  <label id="sCommOther" hidden>{{ _("Community") }}<input id="sComm" type="password" size="16" autocomplete="off"></label>
+  <label>{{ _("Version") }}<select id="sVer"><option value="2c">v2c</option><option value="1">v1</option></select></label>
+  <button class="btn primary" id="sGo">{{ _("Read the switch") }}</button>
+  <span class="muted small" id="sState"></span>
+</form>
+
+<div id="sOut" hidden>
+  <div class="card" id="sSystem"></div>
+  <div class="seg snmp-tabs" id="sTabs">
+    <a href="#" data-t="interfaces" class="on">{{ _("Interfaces") }} <b id="cntInterfaces"></b></a>
+    <a href="#" data-t="vlans">VLAN <b id="cntVlans"></b></a>
+    <a href="#" data-t="neighbors">{{ _("Neighbours (LLDP / CDP)") }} <b id="cntNeighbors"></b></a>
+    <a href="#" data-t="macs">{{ _("MAC address table") }} <b id="cntMacs"></b></a>
+  </div>
+  <div class="card flush">
+    <div class="table-tools"><input type="search" id="sFilter" placeholder="{{ _('Filter…') }}"><label class="check" id="sOnlyWarn"><input type="checkbox" id="sWarn"> {{ _("Only differences with the documentation") }}</label><span class="muted small" id="sInfo"></span></div>
+    <div class="scroll-x" id="sTable"></div>
+  </div>
+</div>
+<script>
+window.SNMP_SWITCH_URL = "{{ url_for('switch_view', sid=0) }}";
+window.SNMP_T = {{ {
+  'name': _('Name'), 'descr': _('Description'), 'location': _('Location'), 'contact': _('Contact'), 'uptime': _('Uptime'),
+  'object_id': _('Object ID'), 'iface': _('Interface'), 'alias': _('Alias'), 'admin': _('Admin'), 'oper': _('Link'),
+  'speed': _('Speed'), 'vlan': _('VLAN'), 'documented': _('Documented port'), 'check': _('Check'), 'errors': _('Errors in / out'),
+  'traffic': _('Traffic in / out'), 'trunk': _('trunk'), 'mac': _('MAC address'), 'vid': _('VLAN'), 'vname': _('Name on the switch'),
+  'vdoc': _('Name in Settings › VLANs'), 'ports': _('Ports'), 'untagged': _('Untagged'), 'proto': _('Protocol'),
+  'local': _('Local port'), 'device': _('Neighbour'), 'rport': _('Neighbour port'), 'platform': _('Platform'),
+  'reading': _('Reading %(what)s…'), 'none': _('Nothing returned by the switch for this table.'), 'not_doc': _('not a documented switch'),
+  'doc_link': _('documented: %(x)s'), 'ok': _('matches the documentation'), 'up': _('up'), 'down': _('down'),
+  'interfaces': _('Interfaces'), 'vlans': 'VLAN', 'neighbors': _('Neighbours'), 'macs': _('MAC addresses'),
+  'done': _('%(n)s SNMP requests to %(host)s'), 'no_ip': _('Choose a switch'), 'disabled': _('Disabled'),
+} | tojson }};
+</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='snmp.js') }}"></script>{% endblock %}

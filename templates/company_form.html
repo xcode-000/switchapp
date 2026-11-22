@@ -1,0 +1,130 @@
+{% extends "base.html" %}{% block title %}{{ comp.name }}{% endblock %}
+{% block content %}
+{% set v = form if form else d %}
+<div class="pagehead"><h1>🏢 {{ comp.name }}</h1><a class="btn ghost" href="{{ url_for('companies_page') }}">{{ _("Back to the companies") }}</a></div>
+{% include "_settings_nav.html" %}
+
+<form method="post" class="card form-grid cols2">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="company">
+  <fieldset>
+    <legend>{{ _("Company") }}</legend>
+    <label>{{ _("Name") }} *<input name="name" value="{{ comp.name }}" required maxlength="120"></label>
+    <label>{{ _("Short name") }}<input name="code" value="{{ comp.code }}" maxlength="12"></label>
+    <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if comp.active }}> {{ _("Active (users with a role can open it)") }}</label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Notes") }}</legend>
+    <label>{{ _("Notes") }}<textarea name="notes" rows="3">{{ comp.notes }}</textarea></label>
+    <p class="muted small">{{ _("Database file") }}: <code>{{ comp.dbfile }}</code> · {{ _("created") }} {{ comp.created_at }}</p>
+  </fieldset>
+  <div class="actions"><button class="btn primary">{{ _("Save") }}</button></div>
+</form>
+
+<form method="post" class="card form-grid cols2" id="directory" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <h2 class="span-all">🔑 {{ _("Domain sign-in (Active Directory)") }}</h2>
+  <p class="span-all muted">{{ _("Users of this company sign in with their Windows account (DOMAIN\\user or user@domain). SwitchDoc checks the password on the domain controller over LDAPS and reads the user's AD groups to give him his role in this company. Local SwitchDoc accounts keep working.") }}</p>
+  <fieldset>
+    <legend>{{ _("Connection") }}</legend>
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if v and v.enabled }}> <b>{{ _("Allow domain sign-in for this company") }}</b></label>
+    <label>{{ _("Name shown on the sign-in page") }}<input name="label" value="{{ v.label if v }}" placeholder="{{ _('e.g. Head office domain') }}"></label>
+    <label>{{ _("Domain controllers") }} *<input name="servers" value="{{ v.servers if v }}" placeholder="dc1.corp.example.com, dc2.corp.example.com">
+      <small>{{ _("One or more, separated by commas; tried in order. host or host:port.") }}</small></label>
+    <div class="sec-port">
+      <label>{{ _("Security") }}<select name="security">
+        {% for k, l in [('ldaps', _('LDAPS (port 636) - recommended')), ('starttls', _('StartTLS (port 389)')), ('plain', _('Plain LDAP (port 389) - not encrypted'))] %}<option value="{{ k }}" {{ 'selected' if (v.security if v else 'ldaps') == k }}>{{ l }}</option>{% endfor %}</select></label>
+      <label>{{ _("Port") }}<input name="port" type="number" min="0" max="65535" value="{{ (v.port if v and v.port) or '' }}" placeholder="{{ _('default') }}"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="verify_cert" value="1" {{ 'checked' if v and v.verify_cert }}> {{ _("Verify the domain controller's certificate (needs the AD certificate authority trusted on the SwitchDoc server)") }}</label>
+    <label>{{ _("Timeout (seconds)") }}<input name="timeout" type="number" min="1" max="30" value="{{ (v.timeout if v and v.timeout) or 5 }}"></label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Domain") }}</legend>
+    <label>{{ _("Base DN (where users and groups are searched)") }} *<input name="base_dn" value="{{ v.base_dn if v }}" placeholder="DC=corp,DC=example,DC=com"></label>
+    <div class="two">
+      <label>{{ _("UPN suffix") }}<input name="upn_suffix" value="{{ v.upn_suffix if v }}" placeholder="corp.example.com"></label>
+      <label>{{ _("NetBIOS name") }}<input name="netbios" value="{{ v.netbios if v }}" placeholder="CORP"></label>
+    </div>
+    <label>{{ _("Service account (read-only)") }}<input name="bind_user" value="{{ v.bind_user if v }}" placeholder="svc-switchdoc@corp.example.com">
+      <small>{{ _("Recommended: an AD account with no rights, used to find users and read their groups (nested groups included). Without it, users bind with their own password.") }}</small></label>
+    <label>{{ _("Service account password") }}<span class="pw"><input type="password" name="bind_pass" autocomplete="new-password" placeholder="{{ _('saved - leave blank to keep') if d and d.bind_pass else '' }}"><button type="button" class="eye" title="{{ _('Show') }}">👁</button></span></label>
+    {% if d and d.bind_pass %}<label class="check small"><input type="checkbox" name="clear_bind_pass" value="1"> {{ _("Remove the saved password") }}</label>{% endif %}
+    <details class="adv"><summary>{{ _("Advanced") }}</summary>
+      <label>{{ _("User filter") }}<input name="user_filter" value="{{ v.user_filter if v }}" placeholder="(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))"></label>
+      <label class="check"><input type="checkbox" name="nested" value="1" {{ 'checked' if not v or v.nested }}> {{ _("Include nested groups (a group inside a mapped group)") }}</label>
+    </details>
+  </fieldset>
+  <fieldset class="span-all">
+    <legend>{{ _("Users who are in no mapped group") }}</legend>
+    <label>{{ _("Default role") }}<select name="default_profile_id"><option value="">{{ _("— refuse the sign-in —") }}</option>{% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if v and v.default_profile_id|string == p.id|string }}>{{ p.name }}</option>{% endfor %}</select>
+      <small>{{ _("Recommended: refuse. Only members of the AD groups mapped below can then use SwitchDoc.") }}</small></label>
+  </fieldset>
+  <div class="actions span-all">
+    <button class="btn primary" name="action" value="directory">{{ _("Save") }}</button>
+    <button class="btn" name="action" value="test" formnovalidate>{{ _("Save and test the connection") }}</button>
+  </div>
+  <fieldset class="span-all">
+    <legend>{{ _("Test a user") }}</legend>
+    <div class="three">
+      <label>{{ _("Username") }}<input name="t_user" autocomplete="off" placeholder="CORP\jdoe" value="{{ request.form.t_user if test else '' }}"></label>
+      <label>{{ _("Password") }}<input name="t_pass" type="password" autocomplete="new-password"></label>
+      <div class="end"><button class="btn" name="action" value="test_user" formnovalidate>{{ _("Save and test this user") }}</button></div>
+    </div>
+  </fieldset>
+  {% if test %}
+  <div class="span-all flash {{ 'ok' if test.ok else 'error' }}">
+    {% if test.user %}
+      <b>{{ _("Password accepted.") }}</b> {{ test.user.first_name }} {{ test.user.last_name }} · {{ test.user.email or '—' }} · {{ _("SwitchDoc username") }} <code>{{ test.username }}</code><br>
+      {{ _("Groups") }}: {{ test.user.group_names|join(', ') or '—' }}<br>
+      {{ _("Role in this company") }}: <b>{{ test.role or _("none - sign-in refused") }}</b>{% if test.rule %} ({{ _("AD group") }} {{ test.rule }}){% endif %}
+    {% else %}{{ test.text }}{% endif %}
+  </div>
+  {% endif %}
+</form>
+
+<div class="card" id="mapping">
+  <h2>{{ _("AD groups → role in this company") }}</h2>
+  <p class="muted">{{ _("At every sign-in the first matching line gives the role (checked from top to bottom). Give the group name (e.g. GG-SwitchDoc-Supervisors) or its full DN. A role an administrator sets by hand on the user's page is kept and wins over AD.") }}</p>
+  {% if not d %}<p class="note">{{ _("Save the domain settings first.") }}</p>{% else %}
+  <table class="tbl">
+    <thead><tr><th>#</th><th>{{ _("AD group") }}</th><th>{{ _("Role") }}</th><th>{{ _("Switches") }}</th><th></th></tr></thead>
+    <tbody>
+    {% for m in maps %}{% set fid = 'mf' ~ m.id %}{% set chosen = (m.sw_groups or '').split(', ') %}
+    <tr class="map-row"><td class="muted">{{ loop.index }}</td>
+      <td><input form="{{ fid }}" name="ad_group" value="{{ m.ad_group }}" required></td>
+      <td><select form="{{ fid }}" name="profile_id">{% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if p.id == m.profile_id }}>{{ p.name }}</option>{% endfor %}</select></td>
+      <td class="small"><label class="check"><input form="{{ fid }}" type="checkbox" name="all_groups" value="1" {{ 'checked' if m.all_groups }}> {{ _("All switches") }}</label>
+        {% if sw_groups %}<select form="{{ fid }}" name="sw_groups" multiple size="2" title="{{ _('Switch groups') }}">{% for gname in sw_groups %}<option {{ 'selected' if gname in chosen }}>{{ gname }}</option>{% endfor %}</select>{% endif %}</td>
+      <td class="r nowrap"><form method="post" class="inline" id="{{ fid }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="map_id" value="{{ m.id }}">
+        <button class="btn sm primary" name="action" value="map_save">{{ _("Save") }}</button>
+        {% if not loop.first %}<button class="btn sm ghost" name="action" value="map_up" title="{{ _('Move up') }}" formnovalidate>↑</button>{% endif %}
+        <button class="btn sm danger" name="action" value="map_del" formnovalidate data-confirm="{{ _('Remove this line?') }}">✕</button></form></td></tr>
+    {% else %}<tr><td colspan="5" class="muted">{{ _("No mapping yet: nobody can sign in with the domain unless a default role is set.") }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <form method="post" class="map-add">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="map_add">
+    <label>{{ _("AD group") }}<input name="ad_group" required placeholder="GG-SwitchDoc-Techs"></label>
+    <label>{{ _("Role") }}<select name="profile_id" required><option value="">{{ _("— choose —") }}</option>{% for p in profiles %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+    <label class="check"><input type="checkbox" name="all_groups" value="1"> {{ _("Can see all switches (ignore groups)") }}</label>
+    {% if sw_groups %}<label>{{ _("Switch groups") }}<select name="sw_groups" multiple size="3">{% for gname in sw_groups %}<option>{{ gname }}</option>{% endfor %}</select></label>{% endif %}
+    <button class="btn primary">+ {{ _("Add") }}</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>{{ _("Users with a role in this company") }} <span class="count">{{ members|length }}</span></h2>
+  <table class="tbl compact"><tbody>
+  {% for m in members %}<tr><td><b>{{ (m.first_name ~ ' ' ~ m.last_name).strip() or m.username }}</b> <span class="muted small">{{ m.username }}</span></td><td>{{ m.profile or '—' }}</td>
+    <td class="small">{% if m.auth_source == 'directory' %}🔑 {{ _("Domain") }}{% else %}{{ _("Local") }}{% endif %}{% if m.source == 'ad' %} · <span class="tag">{{ _("from an AD group") }}</span>{% endif %}</td></tr>
+  {% else %}<tr><td class="muted">{{ _("Nobody yet - give roles on the users' pages.") }}</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+
+<form method="post" class="danger-zone">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete">
+  <b>{{ _("Delete this company") }}</b> - {{ _("its documentation disappears from SwitchDoc (the database file is kept aside in the data folder). Type its exact name to confirm:") }}
+  <input name="confirm" placeholder="{{ comp.name }}"> <button class="btn danger">{{ _("Delete") }}</button>
+</form>
+{% endblock %}

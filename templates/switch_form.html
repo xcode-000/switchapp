@@ -1,0 +1,115 @@
+{% extends "base.html" %}{% block title %}{{ _("Edit %(name)s", name=sw.name) if sw and sw.id else _("New switch") }}{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1>{{ _("Edit %(name)s", name=sw.name) if sw and sw.id else _("New switch") }}</h1>
+  {% set nx = request.args.get('next', '') %}
+  <a class="btn ghost" href="{{ nx if nx.startswith('/') and not nx.startswith('//') else (url_for('switch_view', sid=sw.id) if sw and sw.id else url_for('dashboard')) }}">{{ _("Cancel") }}</a>
+</div>
+{% if sw and sw.status == 'disabled' %}<div class="flash info">{{ _("This switch is disabled: it is hidden from the documentation until it is re-enabled.") }}</div>{% endif %}
+<form method="post" class="card form-grid">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  {% if request.args.get('next') %}<input type="hidden" name="next" value="{{ request.args.get('next') }}">{% endif %}
+  <fieldset>
+    <legend>{{ _("Identity") }}</legend>
+    <label>{{ _("Switch name") }} *<input name="name" value="{{ sw.name if sw }}" required placeholder="SWACC15"></label>
+    {% set cur_layer = (sw.layer if sw and sw.layer else 'L3') %}
+    <label>{{ _("Layer") }}
+      <select name="layer" id="layerSel">{% for v, l in layers %}<option value="{{ v }}" {{ 'selected' if cur_layer == v }}>{{ _(l) }}</option>{% endfor %}</select></label>
+    <label id="ipLabel">{{ _("IP address") }}<input name="ip" id="ipInput" value="{{ sw.ip if sw }}" placeholder="10.99.99.15" pattern="^[0-9a-fA-F:.\/]*$">
+      <small id="ipNote" hidden>{{ _("A Layer 1 (unmanaged) switch has no IP address.") }}</small></label>
+    <label>{{ _("Serial number") }}<input name="serial" value="{{ sw.serial if sw }}"></label>
+    <label>{{ _("In service since") }}<input type="date" name="in_service" value="{{ sw.in_service if sw and sw.in_service }}" title="{{ _('Date the switch was put in service for the first time') }}"></label>
+    <label>{{ _("Model") }}
+      <select name="model" id="modelSel">
+        <option value="">{{ _("— choose a model —") }}</option>
+        {% set cur = sw.model if sw else '' %}
+        {% for m in models %}<option value="{{ m.name }}" data-poe="{{ m.poe }}" data-ports="{{ m.port_count }}" data-sfp="{{ m.sfp_count if m.sfp else 0 }}" {{ 'selected' if m.name == cur }}>{{ m.name }}{% if m.vendor %} — {{ m.vendor }}{% endif %} ({{ m.layer }}{{ ', PoE' if m.poe }}{{ ', ' ~ m.sfp_count ~ '×SFP' if m.sfp and m.sfp_count }})</option>{% endfor %}
+        {% if cur and cur not in models|map(attribute='name') %}<option selected>{{ cur }}</option>{% endif %}
+      </select>
+      <small>{% if can('models','edit') %}<a href="{{ url_for('model_edit') }}" target="_blank">{{ _("Add a new model in Settings › Switch models") }}</a>{% endif %}</small></label>
+    <div class="checks-row">
+      <label class="check"><input type="checkbox" name="poe" value="1" id="poeBox" {{ 'checked' if sw and sw.poe }}> {{ _("PoE switch") }}</label>
+      <label class="check"><input type="checkbox" name="sfp" value="1" id="sfpBox" {{ 'checked' if sw and sw.sfp }}> {{ _("SFP ports") }}</label>
+      <label class="inline-num" id="sfpCountLbl">{{ _("How many?") }}<input type="number" name="sfp_count" id="sfpCount" min="0" max="64" value="{{ sw.sfp_count if sw and sw.sfp_count }}"></label>
+    </div>
+    {% set mon_on = (not sw) or (sw.monitor not in (0, None, '', '0')) %}
+    <label class="check" title="{{ _('Untick for a switch you do not want pinged (lab, spare, switch that blocks ping): it shows Not monitored, is never counted as offline and sends no e-mail.') }}"><input type="checkbox" name="monitor" value="1" id="monBox" {{ 'checked' if mon_on }}> {{ _("Check the status of this switch (online / offline)") }}</label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Location") }}</legend>
+    <label>{{ _("Area") }}<input name="area" value="{{ sw.area if sw }}" list="areas" placeholder="Administration"></label>
+    {% macro pick(name, label, items, current, empty) %}
+    <label>{{ label }}
+      <select name="{{ name }}" id="sel_{{ name }}">
+        <option value="">{{ empty }}</option>
+        {% for it in items %}<option value="{{ it.name }}" data-loc="{{ it.location if 'location' in it.keys() else '' }}" data-area="{{ it.area if 'area' in it.keys() else '' }}" {{ 'selected' if it.name == current }}>{{ it.name }}{% if 'area' in it.keys() and it.area %} — {{ it.area }}{% endif %}{% if 'location' in it.keys() and it.location %} ({{ it.location }}){% endif %}</option>{% endfor %}
+        {% if current and current not in items|map(attribute='name') %}<option selected>{{ current }}</option>{% endif %}
+      </select></label>
+    {% endmacro %}
+    {{ pick('location', _("Location"), loc_list, sw.location if sw else '', _("— choose a location —")) }}
+    {{ pick('rack', _("Rack identifier"), rack_list, sw.rack if sw else '', _("— choose a rack —")) }}
+    {{ pick('designation', _("Office"), office_list, sw.designation if sw else '', _("— choose an office —")) }}
+    {% if can('places','edit') %}<small><a href="{{ url_for('places') }}" target="_blank">{{ _("Manage locations, racks and offices") }}</a></small>{% endif %}
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Ports & access") }}</legend>
+    <label>{{ _("Number of ports") }}<input type="number" name="port_count" id="portCount" min="0" max="512" value="{{ n_ports }}">
+      <small>{{ _("Increasing adds ports at the end; decreasing removes the highest-numbered ports and their documentation. Filled in from the model when empty.") }}</small></label>
+    <label>{{ _("Port name prefix") }}<input name="port_prefix" value="{{ sw.port_prefix if sw }}" placeholder="Gi1/0/ · ether">
+      <small>{{ _("Used to name new ports (blank → 1, 2, 3…). You can still rename any single port.") }}</small></label>
+    {% if can('credentials') %}
+    <label>{{ _("Credential profile") }}
+      <select name="cred_profile_id">
+        <option value="">{{ _("— none —") }}</option>
+        {% for c in creds %}<option value="{{ c.id }}" {{ 'selected' if sw and sw.cred_profile_id|string == c.id|string }}>{{ c.name }}</option>{% endfor %}
+      </select></label>
+    {% endif %}
+    <label>{{ _("Notes") }}<textarea name="notes" rows="3">{{ sw.notes if sw }}</textarea></label>
+  </fieldset>
+  <fieldset class="span-all">
+    <legend>{{ _("Switch groups") }}</legend>
+    <p class="muted small">{{ _("A switch can belong to several groups. Users only see switches that are in one of their groups.") }}</p>
+    <div class="group-picker">
+      {% for gr in groups %}<label class="gcheck" style="--gc: {{ gr.color }}"><input type="checkbox" name="group_ids" value="{{ gr.id }}" {{ 'checked' if gr.id in member }}> {{ gr.name }}</label>
+      {% else %}<span class="muted">{{ _("No groups yet.") }}</span>{% endfor %}
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn primary">{{ _("Save switch") }}</button></div>
+  <datalist id="areas">{% for a in areas %}<option value="{{ a }}">{% endfor %}</datalist>
+  <datalist id="locations">{% for a in locations %}<option value="{{ a }}">{% endfor %}</datalist>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const sel = document.getElementById('modelSel'), pc = document.getElementById('portCount'), poe = document.getElementById('poeBox');
+  const sfp = document.getElementById('sfpBox'), sfpN = document.getElementById('sfpCount'), sfpL = document.getElementById('sfpCountLbl');
+  const layer = document.getElementById('layerSel'), ip = document.getElementById('ipInput'), ipNote = document.getElementById('ipNote');
+  const updSfp = () => { sfpL.hidden = !sfp.checked; };
+  const updLayer = () => { const l1 = layer.value === 'L1'; ip.disabled = l1; ipNote.hidden = !l1; document.getElementById('ipLabel').classList.toggle('greyed', l1); };
+  sel.addEventListener('change', () => {
+    const o = sel.selectedOptions[0];
+    if (!o || !o.dataset.ports) return;
+    if (!pc.value || pc.value === '0') pc.value = o.dataset.ports || '';
+    poe.checked = o.dataset.poe === '1';
+    if (o.dataset.sfp && o.dataset.sfp !== '0') { sfp.checked = true; sfpN.value = o.dataset.sfp; }
+    updSfp();
+  });
+  sfp.addEventListener('change', updSfp); layer.addEventListener('change', updLayer); updSfp(); updLayer();
+  // choosing a location narrows the rack and office lists to that location
+  const loc = document.getElementById('sel_location'), area = document.querySelector('input[name=area]');
+  function filterByLocation() {
+    ['sel_rack', 'sel_designation'].forEach(id => {
+      const s = document.getElementById(id);
+      [...s.options].forEach(o => { o.hidden = !!(o.value && loc.value && o.dataset.loc && o.dataset.loc !== loc.value && !o.selected); });
+    });
+  }
+  loc.addEventListener('change', () => {
+    const o = loc.selectedOptions[0];
+    if (o && o.dataset.area && !area.value) area.value = o.dataset.area;
+    filterByLocation();
+  });
+  filterByLocation();
+})();
+</script>
+{% endblock %}

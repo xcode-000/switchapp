@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}{{ _("Maintenance ticket") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><div><div class="crumbs"><a href="{{ url_for('maintenance') }}">{{ _("Maintenance") }}</a></div>
+  <h1>{% if t.id %}{{ _("Ticket #%(n)s", n=t.id) }}{% else %}{{ _("New maintenance ticket") }}{% endif %}</h1></div></div>
+<form method="post" class="card stack tk-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="grid2">
+    <label>{{ _("Title") }}<input name="title" value="{{ t.title }}" required placeholder="{{ _('e.g. Quarterly check of the Server Room') }}"></label>
+    <label>{{ _("Type of work") }}<select name="kind">{% for k, l in kinds %}<option value="{{ k }}" {{ 'selected' if t.kind == k }}>{{ _(l) }}</option>{% endfor %}</select></label>
+    <label>{{ _("Planned start") }}<input type="datetime-local" name="planned_start" value="{{ t.planned_start|replace(' ', 'T') }}" required></label>
+    <label>{{ _("Planned end") }}<input type="datetime-local" name="planned_end" value="{{ t.planned_end|replace(' ', 'T') }}" required></label>
+  </div>
+  <label>{{ _("Description / instructions") }}<textarea name="description" rows="3">{{ t.description }}</textarea></label>
+  <div class="grid2">
+    <fieldset class="pick">
+      <legend>{{ _("Assigned technicians") }}</legend>
+      {% for u in techs %}<label class="check"><input type="checkbox" name="assignees" value="{{ u.id }}" {{ 'checked' if u.id in assignees }}> {{ user_label(u) }}{% if u.title %} <span class="muted small">· {{ u.title }}</span>{% endif %}</label>
+      {% else %}<p class="muted">{{ _("No user has the Maintenance permission at Edit level.") }}</p>{% endfor %}
+    </fieldset>
+    <fieldset class="pick">
+      <legend>{{ _("Racks") }} <span class="muted small">({{ _("adds every switch of the rack") }})</span></legend>
+      <div class="pick-scroll">
+      {% for key, ids in racks|dictsort %}{% set p = key.split('|') %}<label class="check"><input type="checkbox" name="racks" value="{{ key }}"> <b>{{ p[0] }}</b> <span class="muted small">{{ p[1] }}{% if p[2] %} · {{ p[2] }}{% endif %} · {{ ids|length }}</span></label>{% endfor %}
+      </div>
+    </fieldset>
+  </div>
+  <fieldset class="pick">
+    <legend>{{ _("Switches") }} <input type="search" id="swFind" placeholder="{{ _('Filter…') }}" class="mini-search"></legend>
+    <div class="pick-scroll cols" id="swPick">
+    {% for s in sws %}<label class="check" data-q="{{ (s.name ~ ' ' ~ (s.area or '') ~ ' ' ~ (s.location or '') ~ ' ' ~ (s.rack or ''))|lower }}"><input type="checkbox" name="switch_ids" value="{{ s.id }}" {{ 'checked' if s.id in chosen }}> <b>{{ s.name }}</b> <span class="muted small">{{ s.area }}{% if s.rack %} · {{ s.rack }}{% endif %}</span></label>{% endfor %}
+    </div>
+  </fieldset>
+  <div class="btns"><button class="btn primary">{{ _("Save ticket") }}</button><a class="btn ghost" href="{{ url_for('ticket_view', tid=t.id) if t.id else url_for('maintenance') }}">{{ _("Cancel") }}</a></div>
+</form>
+<script>
+document.getElementById('swFind').addEventListener('input', e => { const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#swPick label').forEach(l => l.hidden = q && !l.dataset.q.includes(q)); });
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block title %}{{ _("Switches") }} · {{ _("Settings") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1>{% if can('switches','edit') %}<a class="btn primary" href="{{ url_for('switch_edit', next=url_for('settings_switches')) }}">+ {{ _("New switch") }}</a>{% endif %}</div>
+{% include "_settings_nav.html" %}
+<p class="muted">{{ _("Every switch defined in SwitchDoc, including disabled switches (hidden from the documentation) and archived hardware of replaced switches.") }}</p>
+<form class="filters" method="get">
+  <div class="seg">
+    <a href="{{ url_for('settings_switches', q=q) }}" class="{{ 'on' if not status }}">{{ _("All") }} <b>{{ counts.values()|sum }}</b></a>
+    {% for k, l in sw_statuses %}<a href="{{ url_for('settings_switches', status=k, q=q) }}" class="{{ 'on' if status == k }}">{{ _(l) }} <b>{{ counts[k] }}</b></a>{% endfor %}
+  </div>
+  <input type="hidden" name="status" value="{{ status }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ _('Name, IP, serial, model, area, location, rack, office…') }}">
+  <button class="btn">{{ _("Search") }}</button>
+</form>
+<div class="card flush scroll-x">
+<table class="tbl sortable">
+  <thead><tr><th>{{ _("Switch") }}</th><th>{{ _("Status") }}</th><th>{{ _("Area / location") }}</th><th>{{ _("Model") }}</th><th>{{ _("Serial number") }}</th><th>{{ _("IP address") }}</th><th data-num>{{ _("Ports") }}</th><th>{{ _("Groups") }}</th><th>{{ _("Actions") }}</th></tr></thead>
+  <tbody>
+  {% for s in switches %}
+  <tr class="{{ 'inactive' if s.status != 'active' }}">
+    <td><a class="swname" href="{{ url_for('switch_view', sid=s.id) }}">{{ s.name }}</a>{% if s.designation %}<div class="sub">{{ s.designation }}</div>{% endif %}</td>
+    <td><span class="tag st-{{ s.status }}">{{ _({'active': 'Active', 'disabled': 'Disabled', 'replaced': 'Replaced'}[s.status]) }}</span>
+      {% if s.status != 'active' %}<div class="sub">{{ s.status_changed_at }}</div>{% endif %}
+      {% if s.status == 'replaced' and s.successor %}<div class="sub">→ <a href="{{ url_for('switch_view', sid=s.replaced_by) }}">{{ s.successor }}</a></div>{% endif %}
+      {% if s.status_reason %}<div class="sub" title="{{ s.status_reason }}">{{ s.status_reason|truncate(40) }}</div>{% endif %}</td>
+    <td>{{ s.area }}{% if s.location %}<div class="sub">{{ s.location }}</div>{% endif %}</td>
+    <td>{{ s.model }} <span class="layer l-{{ (s.layer or 'L3')|lower }}">{{ s.layer or 'L3' }}</span></td>
+    <td>{{ s.serial }}</td>
+    <td><code>{{ s.ip }}</code>{% if s.monitor == 0 and s.ip %}<div class="sub" title="{{ _('The status check is turned off for this switch.') }}">{{ _("status not checked") }}</div>{% endif %}</td>
+    <td data-v="{{ s.n_ports }}">{{ s.n_ports }}</td>
+    <td>{% for gr in s.groups %}<span class="gchip" style="--gc: {{ gr.color }}">{{ gr.name }}</span>{% endfor %}</td>
+    <td class="nowrap actions-cell">
+      <a class="btn sm ghost" href="{{ url_for('switch_export', sid=s.id) }}" title="{{ _('Export to Excel') }}">⤓ Excel</a>
+      {% if s.status != 'replaced' and can('switches','edit') %}<a class="btn sm" href="{{ url_for('switch_edit', sid=s.id, next=url_for('settings_switches', status=status, q=q)) }}">{{ _("Edit") }}</a>{% endif %}
+      {% if can('switches','modify') %}
+        {% if s.status == 'active' %}
+          <a class="btn sm" href="{{ url_for('switch_replace', sid=s.id) }}">{{ _("Replace") }}</a>
+          <form method="post" action="{{ url_for('switch_disable', sid=s.id) }}" class="inline disable-form" data-prompt="{{ _('Disable %(name)s? It will be hidden from the documentation. Optional reason:', name=s.name) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="reason" value="">
+            <input type="hidden" name="next" value="{{ url_for('settings_switches', status=status, q=q) }}">
+            <button class="btn sm danger">{{ _("Disable") }}</button></form>
+        {% elif s.status == 'disabled' %}
+          <form method="post" action="{{ url_for('switch_enable', sid=s.id) }}" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('settings_switches', status=status, q=q) }}">
+            <button class="btn sm primary">{{ _("Re-enable") }}</button></form>
+          <form method="post" action="{{ url_for('switch_delete', sid=s.id) }}" class="inline" data-confirm="{{ _('Delete %(name)s and all its port documentation permanently? This cannot be undone.', name=s.name) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('settings_switches', status=status, q=q) }}">
+            <button class="btn sm danger" title="{{ _('Delete permanently') }}">✕</button></form>
+        {% endif %}
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="empty">{{ _("No switches found.") }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

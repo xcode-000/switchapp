@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% block title %}{{ _("Approvals") if approver else _("My requests") }}{% endblock %}
+{% macro val(f, v) %}{% if f == 'status' %}{{ _(statuses.get(v, v)) }}{% else %}{{ v if v else _("(empty)") }}{% endif %}{% endmacro %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Port changes waiting for approval") if approver else _("My change requests") }}</h1></div>
+<p class="muted">{% if approver %}{{ _("Changes proposed by users with Edit access on Ports. Approving applies them to the port; rejecting discards them.") }}{% else %}{{ _("Your port changes are applied once a supervisor approves them. You can cancel a request while it is pending.") }}{% endif %}</p>
+
+<form method="post" action="{{ url_for('approvals_act') }}" class="card flush" id="apForm">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="table-tools">
+    <b>{{ _("%(n)s pending", n=pending|length) }}</b>
+    {% if pending %}
+      {% if approver %}
+      <input name="comment" placeholder="{{ _('Comment (optional, shown to the requester)') }}" class="grow">
+      <button class="btn sm primary" name="action" value="approve">✓ {{ _("Approve selected") }}</button>
+      <button class="btn sm danger" name="action" value="reject">✕ {{ _("Reject selected") }}</button>
+      {% else %}
+      <button class="btn sm danger" name="action" value="cancel">{{ _("Cancel selected") }}</button>
+      {% endif %}
+    {% endif %}
+  </div>
+  <div class="scroll-x">
+  <table class="tbl approvals">
+    <thead><tr><th class="cb"><input type="checkbox" id="apAll" title="{{ _('Select all') }}"></th><th>{{ _("Switch / port") }}</th><th>{{ _("Requested by") }}</th><th>{{ _("Changes") }}</th></tr></thead>
+    {% for r in pending %}
+    <tr>
+      <td class="cb"><input type="checkbox" name="ids" value="{{ r.id }}" class="apSel"></td>
+      <td><a class="swname" href="{{ url_for('switch_view', sid=r.sid) }}#port-{{ r.port_id }}">{{ r.switch_name }}</a><div class="sub">{{ _("Port") }} {{ r.port_name or _("(deleted)") }}</div></td>
+      <td>{{ r.requester }}<div class="sub">{{ r.requested_at }}</div></td>
+      <td>
+        {% for f, v in r.fields.items() %}
+        <div class="diff"><span class="fl">{{ _(labels.get(f, f)) }}</span> <del>{{ val(f, r.old.get(f, '')) }}</del> → <ins>{{ val(f, v) }}</ins>
+          {% if f in r.stale %}<span class="tag warn" title="{{ _('The port was changed by someone else after this request was made') }}">{{ _("changed since") }}</span>{% endif %}</div>
+        {% endfor %}
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="empty">{{ _("Nothing waiting.") }} ✓</td></tr>{% endfor %}
+  </table>
+  </div>
+</form>
+
+<h2 class="section">{{ _("History") }}</h2>
+<div class="card flush scroll-x">
+<table class="tbl compact">
+  <thead><tr><th>{{ _("Result") }}</th><th>{{ _("Switch / port") }}</th><th>{{ _("Requested by") }}</th><th>{{ _("Changes") }}</th><th>{{ _("Reviewed by") }}</th><th>{{ _("Comment") }}</th></tr></thead>
+  {% for r in history %}
+  <tr>
+    <td><span class="tag {{ r.status }}">{{ _(req_status.get(r.status, r.status)) }}</span></td>
+    <td><a href="{{ url_for('switch_view', sid=r.sid) }}">{{ r.switch_name }}</a> · {{ r.port_name or '?' }}</td>
+    <td>{{ r.requester }}<div class="sub">{{ r.requested_at }}</div></td>
+    <td class="small">{% for f, v in r.fields.items() %}<div>{{ _(labels.get(f, f)) }}: <del>{{ val(f, r.old.get(f, '')) }}</del> → {{ val(f, v) }}</div>{% endfor %}</td>
+    <td>{{ r.reviewer }}<div class="sub">{{ r.reviewed_at }}</div></td>
+    <td class="small">{{ r.comment }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="empty">{{ _("No history yet.") }}</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+(() => { const a = document.getElementById('apAll'); if (!a) return;
+  a.addEventListener('change', () => document.querySelectorAll('.apSel').forEach(c => c.checked = a.checked));
+  document.getElementById('apForm').addEventListener('submit', e => {
+    if (!document.querySelector('.apSel:checked')) { e.preventDefault(); alert(t('Select at least one request.')); }
+  });
+})();
+</script>{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}{{ _("Authorisation profiles") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Settings") }}</h1>{% if can('profiles','edit') %}<a class="btn primary" href="{{ url_for('profile_edit') }}">+ {{ _("New profile") }}</a>{% endif %}</div>
+{% include "_settings_nav.html" %}
+<p class="muted">{{ _("Each user gets one profile. A profile sets the access level for every menu: No access, View, Edit, Modify. On Ports, Edit means the user's changes wait for approval, and Modify means changes apply straight away and the user can approve other people's changes. Which switches a user sees is decided by their switch groups.") }}</p>
+<div class="card flush scroll-x">
+<table class="tbl perm-matrix">
+  <thead><tr><th>{{ _("Menu") }}</th>{% for p in profiles %}<th class="c">{% if can('profiles','edit') %}<a href="{{ url_for('profile_edit', aid=p.id) }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}<div class="sub">{{ _("%(n)s users", n=p.n_users) }}</div></th>{% endfor %}</tr></thead>
+  {% for key, label, help in menus %}
+  <tr><td><b>{{ _(label) }}</b></td>
+    {% for p in profiles %}{% set lv = p.perms.get(key, 'none') %}<td class="c"><span class="lvl-tag lvl-{{ lv }}">{{ _(level_names[lv]) }}</span></td>{% endfor %}</tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

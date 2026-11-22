@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block title %}{{ m.name if m else _("New switch model") }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ _("Model %(name)s", name=m.name) if m else _("New switch model") }}</h1><a class="btn ghost" href="{{ url_for('models') }}">{{ _("Cancel") }}</a></div>
+{% include "_settings_nav.html" %}
+<form method="post" class="card form-grid">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>{{ _("Model") }}</legend>
+    <label>{{ _("Model name") }} *<input name="name" value="{{ m.name if m }}" required placeholder="DGS-1210-28MP"></label>
+    <label>{{ _("Vendor") }}<input name="vendor" value="{{ m.vendor if m }}" placeholder="D-Link, Cisco, MikroTik, TP-Link…"></label>
+    <label>{{ _("Default number of ports") }}<input type="number" name="port_count" min="0" max="512" value="{{ m.port_count if m and m.port_count }}">
+      <small>{{ _("Pre-fills the port count when you create a switch of this model.") }}</small></label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Capabilities") }}</legend>
+    <div class="radio-col">
+      <span class="lbl">{{ _("Layer") }}</span>
+      {% for v, l in layers %}<label class="check"><input type="radio" name="layer" value="{{ v }}" {{ 'checked' if (m.layer if m else 'L2') == v }}> {{ _(l) }}</label>{% endfor %}
+    </div>
+    <label class="check"><input type="checkbox" name="poe" value="1" {{ 'checked' if m and m.poe }}> {{ _("PoE (Power over Ethernet)") }}</label>
+    <label class="check"><input type="checkbox" name="sfp" value="1" id="sfpBox" {{ 'checked' if m and m.sfp }}> {{ _("Has SFP ports") }}</label>
+    <label id="sfpCount">{{ _("Number of SFP ports") }}<input type="number" name="sfp_count" min="0" max="64" value="{{ m.sfp_count if m and m.sfp_count }}">
+      <small>{{ _("The last N ports of the switch are drawn as SFP slots on the front panel.") }}</small></label>
+  </fieldset>
+  <fieldset>
+    <legend>{{ _("Notes") }}</legend>
+    <label>{{ _("Notes") }}<textarea name="notes" rows="4">{{ m.notes if m }}</textarea></label>
+    {% if used_by %}<span class="lbl">{{ _("Used by %(n)s switches", n=used_by|length) }}</span>
+    <div class="chips">{% for s in used_by %}<a class="chip" href="{{ url_for('switch_view', sid=s.id) }}">{{ s.name }}</a>{% endfor %}</div>{% endif %}
+  </fieldset>
+  <div class="actions"><button class="btn primary">{{ _("Save model") }}</button></div>
+</form>
+{% if m and can('models','modify') %}
+<form method="post" action="{{ url_for('model_delete', mid=m.id) }}" class="danger-zone" data-confirm="{{ _('Delete model %(name)s?', name=m.name) }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">{{ _("Delete model") }}</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>
+(() => { const b = document.getElementById('sfpBox'), c = document.getElementById('sfpCount');
+  const upd = () => c.hidden = !b.checked; b.addEventListener('change', upd); upd(); })();
+</script>{% endblock %}
